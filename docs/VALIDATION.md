@@ -62,10 +62,11 @@ The 32-page manual was compiled with pdfLaTeX and BibTeX and inspected as
 rendered pages. No unresolved references, duplicate labels, or overfull boxes
 remain. Model plots were inspected in PNG and also exported as PDF/SVG.
 
-The source distribution and wheel were built locally. GitHub Actions is
-configured for Windows/Linux and Python 3.11–3.13; that matrix has not yet run
-on GitHub. Local verification was on Python 3.12, not all declared platforms or
-minimum dependency versions.
+The source distribution and wheel were built locally. GitHub Actions checks
+Windows/Linux and Python 3.11–3.13; see the [workflow runs](https://github.com/mariaandradeal/1D_hsb-SM-python/actions/workflows/tests.yml)
+for the status and logs of each published commit. The numerical results above
+were recorded locally on Windows/Python 3.12. Minimum dependency versions have
+not been tested as a separate matrix.
 
 See [migration decisions](MIGRATION.md) for the intentional scientific and
 numerical differences from the active MATLAB implementation.
