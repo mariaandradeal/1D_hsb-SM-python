@@ -1,0 +1,23 @@
+{
+  "geometry": "geometry.csv",
+  "channel": {
+    "file": "channel.csv",
+    "slope": 0.04305867290402702
+  },
+  "forcing": {
+    "file": "forcing.csv",
+    "lai_basis": "ground"
+  },
+  "dt": 86400,
+  "parameters": {
+    "Hill": {
+      "iota_rad": 0.13536779832431545
+    }
+  },
+  "metadata": {
+    "site": "Wet Beaver Creek",
+    "source_commit": "8e915a9d1669b37ff9c4a65fd740bcc1d67f551b",
+    "calibration_status": "Default parameters; not a calibrated Python model",
+    "forcing_preparation": "See forcing_corrections.csv; raw source retained"
+  }
+}

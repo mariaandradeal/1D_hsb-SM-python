@@ -1,0 +1,67 @@
+\section{Coupled Root-Zone, Transmission-Zone, and Aquifer Exchange}
+\label{sec:rootzone}
+\label{subsec:tz_dynamics}
+
+The active MATLAB runner uses \texttt{hsbsm\_rz\_tz\_coupled}. The Python function \texttt{hsbsm.physics.soil\_step} uses the same hydraulic closures and signed Darcy gradients. This section replaces the duplicated independent root-zone descriptions in the original manual. It distinguishes the transfer equations from the conservative limits applied during each timestep.
+
+\subsection{States and hydraulic properties}
+
+For each layer $j\in\{r,t\}$, let $z_j$ [m] be its thickness and $\theta_j$ [m$^3$\,m$^{-3}$] its water content. Its storage depth is $W_j=z_j\theta_j$ [m]. Residual and saturated bounds are $W_{j,\min}=z_j\theta_{j,\min}$ and $W_{j,\max}=z_j\theta_{j,s}$. The effective saturation and van Genuchten--Mualem closures are
+\begin{align}
+S_{e,j}&=\frac{\theta_j-\theta_{j,\min}}{\theta_{j,s}-\theta_{j,\min}},\qquad m_j=1-\frac{1}{n_j},\\
+\psi_j&=-\frac{(S_{e,j}^{-1/m_j}-1)^{1/n_j}}{\alpha_j},\\
+K_j&=K_{s,j}S_{e,j}^{1/2}\left[1-(1-S_{e,j}^{1/m_j})^{m_j}\right]^2.
+\end{align}
+Here $\psi_j$ [m] is pressure head, $K_j$ [m\,s$^{-1}$] is unsaturated conductivity, $\alpha_j$ [m$^{-1}$] and $n_j>1$ are retention parameters, and $K_{s,j}$ is saturated conductivity. The code regularizes effective saturation near zero and caps pressure head at $-10$ m in RZ and $-20$ m in TZ, matching the source module.
+
+\subsection{Potential demand, stress, and available water}
+\label{subsec:rz_stress}
+\label{subsec:sl_stress}
+
+The PM module supplies transpiration potential $T^*$ and soil evaporation potential $E_s^*$ over ground area. The active coupling applies the source's linear pressure-head factors
+\begin{equation}
+f_T=\operatorname{clip}\left(\frac{\psi_r+10}{9},0,1\right),\qquad
+f_E=\operatorname{clip}\left(\frac{\psi_r+10}{9.5},0,1\right).
+\end{equation}
+Let $A_r=\max(W_r-W_{r,\min},0)$ [m] be the initially removable root-zone water. Actual transpiration and soil evaporation are
+\begin{align}
+T&=\min(f_T T^*,A_r/\Delta t),\label{eq:etrz_limit}\\
+E_s&=\min\left(f_E E_s^*,\max(A_r/\Delta t-T,0)\right).\label{eq:esoil_limit}
+\end{align}
+Both rates have units m\,s$^{-1}$. Sharing the donor water prevents both fluxes from independently spending the same storage. Infiltration $I$ is then included in the provisional root-zone store, $W_r^*=W_r+(I-T-E_s)\Delta t$.
+
+\subsection{Signed exchange between RZ and TZ}
+
+With elevation positive upward and the ground surface at zero, the layer centers are $Z_r=-z_r/2$ and $Z_t=-(z_r+z_t/2)$. The unconstrained downward-positive exchange is
+\begin{equation}
+q_{rt}=\frac{K_r+K_t}{2}\,
+\frac{(\psi_r+Z_r)-(\psi_t+Z_t)}{(z_r+z_t)/2}.
+\end{equation}
+Negative $q_{rt}$ represents capillary return to the root zone. The flux is limited by removable donor water in the corresponding direction, then debited from one store and credited to the other. The arithmetic-mean conductivity follows the active source module. No second capillary-demand bookkeeping step is applied.
+
+\subsection{TZ--aquifer interface and recharge split}
+
+The inherited coupling interprets aquifer head $h_a\ge0$ as water-table height relative to the bottom of the transmission zone for evaluating the interface gradient. This is a conceptual coupling convention; the soil buckets and the lateral hsB storage remain separate prognostic stores. Define $d_w=\min(h_a,z_t)$ and $L_u=\max(z_t-d_w,10^{-3})$ [m]. The unconstrained interface flux is
+\begin{equation}
+q_{ta}=K_t\frac{\psi_t+z_t/2-d_w}{L_u}.
+\end{equation}
+Positive flux is downward drainage and negative flux is aquifer-to-TZ return. The negative branch is multiplied by \texttt{Soil.TZ.cap\_frac\_of\_K}, with default 0.30. Downward transfer is limited by remaining TZ donor water; upward transfer is limited by aquifer water depth $S/w=fh_a$ and the receiving TZ capacity.
+
+Only the downward part is divided between perched and deep recharge. With $q^+=\max(q_{ta},0)$ and $q^-=\max(-q_{ta},0)$,
+\begin{equation}
+N_{\mathrm{hsB}}=(1-\phi_d)q^+-q^-,\qquad
+N_{\mathrm{deep}}=\phi_d q^+.
+\label{eq:split_recharge}
+\end{equation}
+The parameter $\phi_d\in[0,1]$ is \texttt{Deep.phi\_d}. Negative net perched recharge is withdrawn before lateral integration. The deep reservoir receives only downward transfer and releases water according to the available-water-limited linear reservoir update.
+
+\subsection{Storage closure and saturation excess}
+
+After the signed transfers, any storage above a layer's saturated capacity is recorded as surface runoff $R_r$ or $R_t$ [m\,s$^{-1}$]. It is never discarded by clipping. The layer balances are
+\begin{align}
+\Delta W_r&=(I-T-E_s-q_{rt}-R_r)\Delta t,\\
+\Delta W_t&=(q_{rt}-q_{ta}-R_t)\Delta t.\label{eq:tz_balance}
+\end{align}
+The internal exchange $q_{rt}$ cancels when the balances are added. Python exports signed exchange rates, both layer states, actual ET, and surface runoff for auditing. This treatment changes source cases in which the old module clipped storage after incompatible flux demands.
+
+\newpage

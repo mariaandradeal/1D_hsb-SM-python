@@ -1,0 +1,966 @@
+\documentclass[12pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+\usepackage{enumitem}
+\usepackage{float}
+\usepackage{etoolbox}
+\usepackage{xurl}
+\usepackage{adjustbox}
+\usepackage{microtype}
+\usepackage{natbib}
+\usepackage{listings}
+\usepackage{xcolor}
+% Preamble (if not already there)
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric}
+\usepackage{lscape}
+\usepackage[colorlinks=true,
+            linkcolor=blue,
+            citecolor=blue,
+            filecolor=blue,
+            urlcolor=blue]{hyperref}
+
+% --- Notation patch (hsB--SM) ---
+% Slopes: use \iota (not \gamma, which is psychrometric)
+\newcommand{\slope}{\iota}
+% Psychrometric constant:
+\newcommand{\gpsy}{\gamma_{\mathrm{psy}}}
+% von Kármán constant:
+\newcommand{\karm}{\kappa}
+% Infiltration capacity:
+\newcommand{\fcap}{f_{\mathrm{cap}}}
+% Channel width function (pdf of flow path lengths):
+\newcommand{\omegac}{\omega_c}
+% Unit hydrograph (routing):
+\newcommand{\UH}{u_c}
+
+% Setup spacing and styles
+\setlength{\parskip}{0.8em}
+\setlength{\parindent}{0pt}
+\sisetup{detect-all, output-exponent-marker=\ensuremath{\mathrm{e}}, per-mode=symbol}
+
+% Header/Footer
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{1D hsB - SM Model}
+\lhead{Marcus N. Gomes Jr., Ph.D.}
+\cfoot{\thepage}
+
+% Title setup
+\title{\textbf{Coupled Surface-Subsurface Hillslope Hydrological Model: hsB--SM Model: MATLAB Formulation and Python Implementation}}
+\author{Marcus Nóbrega Gomes Jr.}
+\date{Python version 0.1.0 --- 24 November 2026}
+
+\lstset{basicstyle=\ttfamily\small,breaklines=true,breakatwhitespace=false,
+ columns=fullflexible,keepspaces=true,showstringspaces=false,frame=single,
+ rulecolor=\color{gray!35},xleftmargin=0.3em,xrightmargin=0.3em}
+\setlength{\headheight}{16pt}
+\emergencystretch=2em
+\AtBeginEnvironment{tabular}{\small}
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ------------------------------
+\section*{Author Information}
+\addcontentsline{toc}{section}{Author Information}
+
+\textbf{Marcus N. Gomes Jr.} \\
+Ph.D. - Postdoctoral Researcher II at University of Arizona \\
+
+\vspace{0.5em}
+
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{ll}
+\textbf{Website:} & \href{https://marcusnobrega-eng.github.io/profile/}{\texttt{marcusnobrega-eng.github.io/profile}} \\
+\textbf{C.V.:} & \href{https://marcusnobrega-eng.github.io/profile//files/CV___Marcus_N__Gomes_Jr_.pdf}{\texttt{CV}} \\
+\textbf{ORCID:} & \href{https://orcid.org/0000-0002-8250-8195}{\texttt{https://orcid.org/0000-0002-8250-8195}} \\
+\textbf{GitHub:} & \href{https://github.com/marcusnobrega-eng}{\texttt{https://github.com/marcusnobrega-eng}} \\
+\textbf{Email:} & \texttt{marcusnobrega.engcivil@gmail.com}
+\end{tabular}\end{adjustbox}
+
+\newpage
+% ----------------------------------------------------------------
+\input{python_quickstart}
+
+% PART I -- Quickstart and MATLAB Usage
+% Model: Hillslope-Storage Boussinesq (HSB)
+% Author: Marcus Nobrega Gomes Junior, PhD
+%         University of Arizona, Hydrology and Atmospheric Sciences
+% ----------------------------------------------------------------
+% ============================================================
+% hsB-SM Technical Manual
+% Part 1 -- Canopy Interception and Evapotranspiration
+% ============================================================
+\newpage
+\paragraph{Conceptual structure.}
+The five-store diagram is retained from the MATLAB manual. Signed Darcy exchange and conservative bounds in the current implementation are specified in Section~\ref{sec:rootzone}; the diagram is a conceptual summary rather than an executable module graph.
+
+The model comprises five interacting stores: (i) a canopy interception store, (ii) a root-zone (RZ) bucket that holds plant-available water, (iii) a transmission zone (TZ) that buffers percolation and mediates capillary return to the RZ, (iv) an hsB aquifer (AQ) that routes lateral baseflow and can overflow to the surface, and (v) a deep reservoir (DEEP) that receives a configurable fraction of TZ gravity drainage and releases water as a first-order outflow. Ground-reaching rainfall ($P_\text{net}$) partitions into infiltration, canopy evaporation, transpiration, and bare-soil evaporation. Percolation from the RZ ($q_{\text{rz}\to\text{tz}}$) enters the TZ, which (a) supplies an \emph{actual} capillary return to the RZ ($q_{\text{tz}\to\text{rz}}$), limited by a TZ capacity model, and (b) drains by gravity ($q_{\text{drain}}$). The TZ gravity drainage is split into effective aquifer recharge $q_{\text{to\_aq}}=(1-f_D)\,q_{\text{drain}}$ and deep percolation $q_{\text{to\_deep}}=f_D\,q_{\text{drain}}$. The hsB aquifer produces baseflow and, when full, may overflow; overflow can be optionally re-absorbed by TZ/RZ before becoming overland flow. The outlet discharge combines routed surface inflow and (optionally) routed baseflow and deepflow.
+
+
+\begin{figure}
+    \centering
+    \includegraphics[width=1\linewidth]{Figures/hsB_Conceptual_Model.pdf}
+    \caption{Updated conceptual model showing five stores (Canopy, RZ, TZ, hsB Aquifer, Deep) with (i) demand--supply capillary exchange between TZ and RZ, (ii) TZ gravity drainage split ($f_D$) into aquifer recharge and deep percolation, and (iii) optional overflow fill--spill (AQ $\to$ TZ/RZ $\to$ surface).}
+    \label{fig:placeholder}
+\end{figure}
+
+ \begin{table}[h!]
+\centering
+\caption{Summary of variables represented in the conceptual hsB--SM schematic.}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Symbol} & \textbf{Description} & \textbf{Units} \\
+\midrule
+\multicolumn{3}{l}{\textbf{Meteorological Forcing}} \\
+$S_\downarrow$ & Incoming shortwave radiation & W\,m$^{-2}$ \\
+$L_\downarrow$ & Incoming longwave radiation & W\,m$^{-2}$ \\
+$T_a$ & Air temperature & K \\
+$P_{\mathrm{air}}$ & Air pressure & Pa \\
+$\mathrm{RH}$ & Relative humidity & -- \\
+$z_r$ & Reference height for meteorological variables & m \\
+$U(z_r)$ & Wind speed at $z_r$ & m\,s$^{-1}$ \\
+$P$ & Precipitation incident on canopy & m\,s$^{-1}$ \\
+$P_{\text{net}}$ & Net precipitation reaching the soil (throughfall + drip) & m\,s$^{-1}$ \\
+\midrule
+\multicolumn{3}{l}{\textbf{Storages}} \\
+$S_c$ & Canopy interception storage & m \\
+$S_{sc}$ & Maximum canopy storage capacity & m \\
+$S_{rz}$ & Root-zone water storage & m \\
+$S_{tz}$ & Transmission-zone storage & m \\
+$S(x,t)$ & Perched (hsB) aquifer storage per unit length & m$^{2}$ \\
+$S_D$ & Deep-aquifer (linear reservoir) storage & m$^{3}$ \\
+\midrule
+\multicolumn{3}{l}{\textbf{Fluxes (Water and Energy)}} \\
+$e_c$ & Wet-canopy evaporation & m\,s$^{-1}$ \\
+$e_T$ & Transpiration from vegetation (dry canopy) & m\,s$^{-1}$ \\
+$e_s$ & Bare-soil evaporation & m\,s$^{-1}$ \\
+$Q_{\text{inf}}$ & Infiltration flux from surface to root zone & m\,s$^{-1}$ \\
+$N_{\text{eff}}$ & Recharge from transmission zone to perched aquifer & m\,s$^{-1}$ \\
+$N_{\text{deep}}$ & Deep percolation to deep aquifer & m\,s$^{-1}$ \\
+$\psi$ & Matric potential (soil water tension) & m \\
+$Q_s$ & Subsurface lateral flow within unsaturated soil & m$^{3}$\,s$^{-1}$ \\
+$Q_{\text{surf}}$ & Surface runoff routed through the channel & m$^{3}$\,s$^{-1}$ \\
+$Q_b$ & Baseflow from perched aquifer (hsB outlet flux) & m$^{3}$\,s$^{-1}$ \\
+$Q_{\text{deep}}$ & Deep baseflow (from deep aquifer) & m$^{3}$\,s$^{-1}$ \\
+$Q_{\text{tot}}$ & Total discharge at catchment outlet & m$^{3}$\,s$^{-1}$ \\
+\bottomrule
+\end{tabular}\end{adjustbox}
+\end{table}
+
+\section{Canopy Interception and Wet-Canopy Evaporation}
+\label{sec:canopy}
+
+\subsection{Conceptual Overview}
+
+The canopy layer represents the interception and evaporation of precipitation on vegetation surfaces.
+Precipitation incident on the vegetated fraction of the ground first fills a finite interception store on the canopy, which subsequently evaporates at a potential rate supplied by the Penman--Monteith (PM) formulation.
+This component governs the partitioning of gross rainfall \(P\,[\mathrm{m\,s^{-1}}]\) into (i) intercepted water that evaporates, (ii) canopy drip, and (iii) direct throughfall reaching the soil surface.
+
+The canopy process operates over the vegetated fraction \(f_v\in[0,1]\), while the open fraction \((1-f_v)\) transmits rainfall directly to the surface.
+Within the vegetated fraction, a ``free throughfall'' coefficient \(f_0\in[0,1]\) allows a fraction of rainfall to bypass leaves and reach the ground without being stored in the canopy.
+
+In what follows, all fluxes and storages are expressed \emph{per unit ground area}, so that the effects of the vegetation fraction are already embedded in the node-scale variables.
+The node-scale wet-canopy evaporation \(E_{\mathrm{can}}\) is the same physical quantity as the wet-canopy component \(e_{wc}\) used in the energy-balance notation (Section~\ref{sec:energy_ET_partitioning}), simply expressed at the ground-area scale.
+
+\subsection{Governing Water Balance}
+
+The prognostic water balance for the canopy interception store, expressed per unit ground area \([\mathrm{m}]\), is
+\begin{equation}
+\frac{dS_{\mathrm{can}}}{dt}
+  = P_{\mathrm{veg,eff}} - E_{\mathrm{can}} - D_{\mathrm{can}},
+\label{eq:canopy_balance}
+\end{equation}
+where
+\begin{itemize}
+  \item \(S_{\mathrm{can}}\,[\mathrm{m}]\) is the intercepted water depth on the canopy (per unit ground area),
+  \item \(E_{\mathrm{can}}\,[\mathrm{m\,s^{-1}}]\) is the actual node-scale evaporation rate from wet foliage, and
+  \item \(D_{\mathrm{can}}\,[\mathrm{m\,s^{-1}}]\) is the drip (overflow) flux released from the canopy store to the ground.
+\end{itemize}
+
+Only the portion of rainfall that actually interacts with the canopy enters \(S_{\mathrm{can}}\).
+The effective interception input (per ground area) is
+\begin{equation}
+P_{\mathrm{veg,eff}} = f_v (1 - f_0)\,P,
+\label{eq:P_veg_eff}
+\end{equation}
+where
+\begin{itemize}
+  \item \(P\,[\mathrm{m\,s^{-1}}]\) is gross rainfall per ground area,
+  \item \(f_v\) is the vegetated fraction, and
+  \item \(f_0\) is the free-throughfall coefficient within the vegetated fraction.
+\end{itemize}
+Thus, \(f_v(1-f_0)P\) is the portion of rainfall that first fills the canopy store, while \(f_v f_0 P\) passes directly to the ground as free throughfall under the canopy.
+
+\subsection{Storage Capacity and Effective Inputs}
+
+The maximum interception capacity of the canopy is parameterized as a function of vegetation density and leaf area index (LAI):
+\begin{equation}
+W_{\mathrm{cap}} = f_v \, c_w \, \mathrm{LAI},
+\label{eq:Wcap_def}
+\end{equation}
+where \(W_{\mathrm{cap}}\,[\mathrm{m}]\) is the maximum water depth that can be retained per unit ground area,
+\(c_w\,[\mathrm{m\,LAI^{-1}}]\) is the canopy water capacity per unit LAI, and
+LAI is the one-sided leaf area index.
+
+The interception input \eqref{eq:P_veg_eff} and the capacity \eqref{eq:Wcap_def} together determine how quickly the canopy saturates during a storm and how much water is available for wet-canopy evaporation between storms.
+
+\subsection{Evaporation from Wet Foliage}
+
+Potential wet-canopy evaporation is supplied by the PM routine as a patch-scale rate \(e_{\mathrm{wetCan}}\,[\mathrm{m\,s^{-1}}]\) defined over the vegetated surface.
+Converted to a node-scale (ground-area) potential flux, this becomes
+\begin{equation}
+E_{\mathrm{can}}^{\ast} = f_v\, e_{\mathrm{wetCan}}.
+\label{eq:Ecan_potential}
+\end{equation}
+
+The actual wet-canopy evaporation rate is limited by water availability within the interception store.
+Over a time step \(\Delta t\,[\mathrm{s}]\), the maximum amount that can evaporate is the sum of current storage and the interception input received during that step:
+\begin{equation}
+E_{\mathrm{can}} = \min\!\left(E_{\mathrm{can}}^{\ast},\;
+\frac{S_{\mathrm{can}} + P_{\mathrm{veg,eff}}\,\Delta t}{\Delta t}\right).
+\label{eq:Ecan_actual}
+\end{equation}
+This guarantees that evaporation cannot exceed either (i) the PM potential demand or (ii) the water that is actually present on the canopy.
+
+\subsection{Overflow, Drip, and Updated Storage}
+
+After applying interception input and evaporation, the provisional canopy store at the end of the step is
+\begin{equation}
+S_{\mathrm{can}}^{\star} = S_{\mathrm{can}} + P_{\mathrm{veg,eff}}\,\Delta t - E_{\mathrm{can}}\,\Delta t.
+\label{eq:Scan_star}
+\end{equation}
+Any excess beyond the capacity \(W_{\mathrm{cap}}\) is released as overflow or drip,
+\begin{equation}
+D_{\mathrm{can}} = \eta_d \,
+\frac{\max\bigl(S_{\mathrm{can}}^{\star} - W_{\mathrm{cap}},\,0\bigr)}{\Delta t},
+\label{eq:Dcan_def}
+\end{equation}
+where \(\eta_d\in[0,1]\) is a dimensionless drip coefficient that defines the fraction of excess storage instantaneously routed to the ground (default \(\eta_d=1\)).
+
+The remaining canopy storage at the end of the time step is then
+\begin{equation}
+S_{\mathrm{can}}^{(t+\Delta t)} =
+\min\!\bigl(W_{\mathrm{cap}},\, S_{\mathrm{can}}^{\star} - D_{\mathrm{can}}\,\Delta t\bigr),
+\label{eq:Scan_update}
+\end{equation}
+which ensures that \(0 \le S_{\mathrm{can}}^{(t+\Delta t)} \le W_{\mathrm{cap}}\).
+
+\subsection{Throughfall and Ground-Reaching Precipitation}
+
+The total ground-reaching rainfall rate, which becomes available for infiltration at the surface, combines:
+\begin{enumerate}
+  \item open-area rainfall over the non-vegetated fraction \((1-f_v)\),
+  \item free throughfall within the vegetated fraction \(f_v f_0 P\), and
+  \item canopy drip \(D_{\mathrm{can}}\) released from the interception store.
+\end{enumerate}
+At the node scale, the net precipitation to the ground is
+\begin{equation}
+P_{\mathrm{net}} = (1 - f_v)\,P \;+\; f_v f_0\,P \;+\; D_{\mathrm{can}}.
+\label{eq:Pnet_canopy}
+\end{equation}
+By construction, \(P_{\mathrm{net}}\,[\mathrm{m\,s^{-1}}]\) is the quantity passed to the infiltration module at each computational node.
+The wet-canopy evaporation \(E_{\mathrm{can}}\) contributes to the total evapotranspiration as the wet-canopy component.
+
+\subsection{Conservation of Mass}
+
+Using the definitions above, water is strictly conserved over the ground area.
+Over a single time step \(\Delta t\), the node-scale water balance can be written as
+\begin{equation}
+P\,\Delta t = E_{\mathrm{can}}\,\Delta t
+             + P_{\mathrm{net}}\,\Delta t
+             + \bigl(S_{\mathrm{can}}^{(t+\Delta t)} - S_{\mathrm{can}}^{(t)}\bigr),
+\label{eq:canopy_mass_conservation}
+\end{equation}
+which states that gross rainfall equals the sum of wet-canopy evaporation, net precipitation to the ground, and the change in canopy storage.
+Substituting \eqref{eq:P_veg_eff}--\eqref{eq:Dcan_def} into \eqref{eq:canopy_balance} and \eqref{eq:Pnet_canopy} shows that \eqref{eq:canopy_mass_conservation} holds identically for any \(f_v\) and \(f_0\).
+
+\subsection{Model Variables and Dimensions}
+
+Table~\ref{tab:canopy_vars} lists the main canopy variables, their physical meaning, and dimensions, consistent with the code implementation.
+
+\begin{table}[H]
+\centering
+\caption{Primary variables used in the canopy interception module.}
+\label{tab:canopy_vars}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{llll}
+\toprule
+Symbol & Description & Units & Code variable \\
+\midrule
+\(P\) & Gross rainfall rate (per ground area) & m\,s\(^{-1}\) & \texttt{Forc.P} \\
+\(f_v\) & Vegetation cover fraction & -- & \texttt{Forc.fv} \\
+LAI & Leaf area index (one-sided) & -- & \texttt{Forc.LAI} \\
+\(f_0\) & Free-throughfall coefficient in vegetated fraction & -- & \texttt{Veg.free\_throughfall\_f0} \\
+\(S_{\mathrm{can}}\) & Canopy water storage (per ground area) & m & \texttt{S.Can.S\_can\_m} \\
+\(W_{\mathrm{cap}}\) & Maximum canopy storage capacity & m & \texttt{diag.Wcap\_m} \\
+\(c_w\) & Storage capacity per unit LAI & m\,LAI\(^{-1}\) & \texttt{Veg.cw\_per\_LAI} \\
+\(\eta_d\) & Drip coefficient & -- & \texttt{Veg.drip\_coef} \\
+\(e_{\mathrm{wetCan}}\) & Potential wet-canopy evap (patch scale) & m\,s\(^{-1}\) & \texttt{PM.e\_wetCan} \\
+\(E_{\mathrm{can}}^{\ast}\) & Potential canopy evap (ground scale) & m\,s\(^{-1}\) & \texttt{Node.Canopy.PET\_can\_mps} \\
+\(E_{\mathrm{can}}\) & Actual canopy evaporation (ground scale) & m\,s\(^{-1}\) & \texttt{Node.Canopy.E\_can\_mps} \\
+\(D_{\mathrm{can}}\) & Canopy drip / overflow to ground & m\,s\(^{-1}\) & \texttt{Node.Canopy.D\_can\_mps} \\
+\(P_{\mathrm{veg,eff}}\) & Effective interception input & m\,s\(^{-1}\) & \texttt{Node.Canopy.PvegEff\_mps} \\
+\(P_{\mathrm{net}}\) & Ground-reaching rainfall rate & m\,s\(^{-1}\) & \texttt{Node.Canopy.Pnet\_mps} \\
+\bottomrule
+\end{tabular}\end{adjustbox}
+\end{table}
+
+\subsection{Link to Potential Evapotranspiration Components}
+
+In the time-stepping sequence, canopy interception is updated before infiltration and soil moisture.
+Vegetation properties are drawn from \texttt{Params.Veg}, potential wet-canopy fluxes are obtained from the PM computation (Section~\ref{sec:potET_ra_rs}), and the canopy update is carried out by \texttt{hsbsm\_canopy\_pm()}, which implements Eqs.~\eqref{eq:canopy_balance}--\eqref{eq:Pnet_canopy}.
+
+The node-scale flux \(E_{\mathrm{can}}\) is then used as the wet-canopy evapotranspiration component in the energy-balance partitioning, while \(P_{\mathrm{net}}\) is passed to the infiltration and root-zone module.
+When the canopy module is disabled, a pass-through fallback sets
+\[
+P_{\mathrm{net}} = P, \qquad E_{\mathrm{can}} = 0,
+\]
+corresponding to a bare or effectively non-intercepting surface.
+
+
+
+
+\section{Infiltration Capacity and Surface Partitioning}
+\label{sec:infiltration}
+
+\subsection{Conceptual Overview}
+Infiltration converts ground-reaching precipitation into a vertical flux that enters the soil. The scheme computes a per-node infiltration capacity using Milly-type algebra and optionally limits conductivity with a moisture factor inspired by Troch-style controls. The incoming water at the surface, \(P_{\mathrm{net}}\,[\mathrm{m\,s^{-1}}]\), is partitioned at each node into an infiltrating flux \(I\,[\mathrm{m\,s^{-1}}]\), an infiltration-excess runoff \(R_{\mathrm{ex}}\,[\mathrm{m\,s^{-1}}]\) whenever supply exceeds capacity, and a saturation-excess term \(R_{\mathrm{sat}}\,[\mathrm{m\,s^{-1}}]\), which is kept zero in this module (saturation overland flow is handled elsewhere).
+
+\subsection{Soil State, Effective Saturation, and Moisture Controls}
+The model uses root-zone soil properties to represent near-surface hydraulic behavior. Volumetric water content at the node, \(\theta[-]\), is either passed from the state or defaults to \(\theta_0\). Effective saturation is
+\[
+S_e=\frac{\theta-\theta_r}{\theta_s-\theta_r}, \qquad S_e\in [S_{e,\min},\,1],
+\]
+where \(\theta_s\) is porosity, \(\theta_r\) is the residual water content, and \(S_{e,\min}\) is a small floor to avoid degeneracy. When the optional Troch control is active, a moisture factor \(c=\min(S_e,\,c_{\max})\) limits the effective hydraulic conductivity used in the capacity calculation. In the default Milly mode, conductivity is not reduced by \(c\).
+
+\subsection{Sorptivity and Effective Conductivity}
+The capacity expression combines two physical controls: an effective conductivity \(K_{\mathrm{eff}}\) and a sorptivity \(S\,[\mathrm{m\,s^{-1/2}}]\) that represents the capillary drive of an advancing wetting front. Users may override \(S\) directly; in that case the code skips the internal estimate. Otherwise, \(S\) is estimated from soil parameters using a Milly-style proxy,
+\[
+S \;\approx\; \sqrt{\frac{2\,\Delta\theta\,K_{\mathrm{base}}}{\alpha_{\mathrm{eff}}}},
+\qquad \Delta\theta=\max(\theta_s-\theta,\,0),
+\]
+where \(K_{\mathrm{base}}\,[\mathrm{m\,s^{-1}}]\) is the root-zone saturated hydraulic conductivity and \(\alpha_{\mathrm{eff}}\,[\mathrm{m^{-1}}]\) is taken from van Genuchten \(\alpha\) (or its Troch override when provided). The effective conductivity is
+\[
+K_{\mathrm{eff}}=
+\begin{cases}
+c\,K_{\mathrm{base}}, & \text{Troch mode (moisture-limited)},\\
+K_{\mathrm{base}}, & \text{Milly mode}.
+\end{cases}
+\]
+
+\subsection{Milly Capacity and Supply--Capacity Partitioning}
+Let \(F\,[\mathrm{m}]\) be the cumulative infiltrated depth at the beginning of the time step. The Milly algebra used in the code produces a closed-form infiltration \emph{capacity} \(I_{\max}\,[\mathrm{m\,s^{-1}}]\),
+\[
+I_{\max}=K_{\mathrm{eff}}+\frac{S^2}{2\max(F,F_{\min})},
+\]
+where $F_{\min}>0$ is the cumulative-depth floor (default 0.01 m). This expression transitions from sorptivity control (early times, small \(F\)) to conductivity control (late times, large \(F\)). The actual infiltration rate is the minimum between the water supply and the capacity,
+\[
+I \;=\; \min\!\bigl(P_{\mathrm{net}},\, I_{\max}\bigr).
+\]
+Infiltration-excess runoff forms when supply exceeds capacity:
+\[
+R_{\mathrm{ex}} \;=\; \max\!\bigl(P_{\mathrm{net}}-I,\,0\bigr).
+\]
+Saturation-excess runoff is not generated by this module, i.e., \(R_{\mathrm{sat}}=0\); any perched or saturation-driven overland flow is computed in the corresponding saturation component of the model.
+
+\subsection{Cumulative Infiltration Update and Dry-Step Reset}
+The cumulative infiltrated depth is advanced as
+\[
+F^{(t+\Delta t)} \;=\; F^{(t)} + I\,\Delta t,
+\]
+with \(\Delta t\,[\mathrm{s}]\) the model time step. A dry-step counter is incremented when \(P_{\mathrm{net}}=0\). After a configurable number of consecutive dry steps, \(F\) is reset to a prescribed \(F_0\) to reinitialize the near-surface wetting history in long dry spells. This improves numerical robustness and prevents unrealistically persistent sorptivity suppression.
+
+\subsection{Mass Balance at the Surface}
+At each node and time step, the surface water budget is
+\[
+P_{\mathrm{net}}\,\Delta t \;=\; I\,\Delta t \;+\; R_{\mathrm{ex}}\,\Delta t \;+\; R_{\mathrm{sat}}\,\Delta t,
+\]
+with \(R_{\mathrm{sat}}=0\) inside this module. The infiltrated volume joins the soil water balance of the root zone in the next subcomponent.
+
+\subsection{Variables, Parameters, and Code Correspondence}
+Table~\ref{tab:infiltration_vars} lists the principal quantities, meanings, units, and their names in the implementation.
+
+\begin{table}[H]
+\centering
+\caption{Primary variables and parameters for infiltration capacity and partitioning.}
+\label{tab:infiltration_vars}
+\begin{adjustbox}{max width=\linewidth}\begin{tabular}{llll}
+\toprule
+Symbol & Description & Units & Code variable \\
+\midrule
+\(P_{\mathrm{net}}\) & Ground-reaching rainfall supply & m\,s\(^{-1}\) & \texttt{Pnet\_i} \\
+\(I\) & Actual infiltration rate & m\,s\(^{-1}\) & \texttt{Inf\_i} \\
+\(R_{\mathrm{ex}}\) & Infiltration-excess runoff rate & m\,s\(^{-1}\) & \texttt{R\_ex\_i} \\
+\(R_{\mathrm{sat}}\) & Saturation-excess runoff rate & m\,s\(^{-1}\) & \texttt{R\_sat\_i} (=0 here) \\
+\(F\) & Cumulative infiltrated depth & m & \texttt{SInf.Fi\_m} \\
+\(\theta\) & Volumetric water content & -- & \texttt{theta} (from \texttt{S.RZ.theta}) \\
+\(\theta_s,\theta_r\) & Saturated and residual water contents & -- & \texttt{Params.Soil.RZ.\{theta\_sat,theta\_min\}} \\
+\(S_e\) & Effective saturation & -- & derived from \(\theta\) \\
+\(S\) & Sorptivity (capillary drive) & m\,s\(^{-1/2}\) & \texttt{SInf.last\_S\_mps05} (diagnostic) \\
+\(K_{\mathrm{base}}\) & Base saturated conductivity (RZ) & m\,s\(^{-1}\) & \texttt{Params.Soil.RZ.vG.Ks} or \texttt{Infil.K\_mps} \\
+\(K_{\mathrm{eff}}\) & Effective conductivity (after moisture limit) & m\,s\(^{-1}\) & internal \\
+\(\alpha\) & van Genuchten inverse capillary length & m\(^{-1}\) & \texttt{Params.Soil.RZ.vG.alpha} \\
+\(\alpha_{\mathrm{eff}}\) & Effective inverse capillary length & m\(^{-1}\) & \texttt{Params.Troch.alpha\_inv\_m}\({}^{-1}\) or \(\alpha\) \\
+\(c\) & Moisture factor (Troch) & -- & from \(S_e\), capped by \texttt{Infil.max\_c} \\
+\(S_{\mathrm{user}}\) & User-provided sorptivity override & m\,s\(^{-1/2}\) & \texttt{Infil.S\_mps05} \\
+\(\Delta t\) & Time step & s & \texttt{dt} \\
+\bottomrule
+\end{tabular}\end{adjustbox}
+\end{table}
+
+% \subsection{Implementation Notes}
+% The runner calls a safe wrapper that attempts the user-selected infiltration function and falls back to a minimal partitioner if needed:
+% \[
+% [\mathbf{I},\mathbf{R}_{\mathrm{ex}},\mathbf{R}_{\mathrm{sat}},S_{\mathrm{Inf}}]
+% =\texttt{local\_safe\_infiltration\_vec}(\texttt{Fns.infiltration},\mathbf{P}_{\mathrm{net}},S_{\mathrm{Inf}},\texttt{Params},\Delta t,\boldsymbol{\theta},N_x).
+% \]
+% The Milly/Troch function adheres to the signature \texttt{Fns.infiltration(Pnet\_i,SInf,Params,dt,theta)} and must return node-length column vectors for \(I\), \(R_{\mathrm{ex}}\), \(R_{\mathrm{sat}}\) (zero in this module), and an updated \texttt{SInf} with the cumulative infiltration \(F\). The state also keeps a dry-step counter that triggers resetting \(F\) to \(F_0\) after a configurable number of consecutive dry steps, with thresholds that may depend on \(\Delta t\).
+
+
+% ============================================================
+% hsB-SM Technical Manual
+% Part 2 -- Root Zone and Transmission Zone Balances
+% ============================================================
+\newpage
+\input{coupled_soil}
+
+\section{Surface Runoff Generation and Baseflow/Channel Routing}
+\label{sec:surface_runoff}
+
+This section specifies how hsB-SM converts precipitation into (i) \emph{surface runoff} that is \emph{routed through the channel network} using a linearized de Saint--Venant response, and (ii) \emph{subsurface baseflow} generated by the hillslope-storage Boussinesq (hsB) aquifer, which is \emph{delivered instantaneously at the outlet}. We also account for a \emph{deep aquifer} partition of percolation (transmission-zone drainage), which may act as a slow baseflow reservoir.
+
+\subsection{Runoff production at the land surface}
+
+Let $P_{\text{net}}(t)$ denote the net precipitation (throughfall + drip) that reaches the ground (see Part~1), and let $f_{\mathrm{cap}}(t)$ be the surface infiltration capacity (Part~2). At each node, the two canonical runoff mechanisms are
+\begin{equation}
+r_{\text{ex}}(t) \;=\; \max\!\left[\,0,\; P_{\text{net}}(t) - f_{\mathrm{cap}}(t)\,\right],
+\label{eq:rex}
+\end{equation}
+\begin{equation}
+r_{\text{sat}}(t) \;=\; \max\!\left[\,0,\; P_{\text{net}}(t) - i(t)\,\right],
+\label{eq:rsat}
+\end{equation}
+where $i(t)=\min\!\big(P_{\text{net}},\,f_{cap}\big)$ is the actual infiltration rate. The total surface runoff rate (depth) is
+\begin{equation}
+r(t) \;=\; r_{\text{ex}}(t) + r_{\text{sat}}(t).
+\label{eq:r-total}
+\end{equation}
+For mixed land cover, node-scale fluxes are area-weighted by the vegetation fraction $f_v$ (Part~1):
+\begin{equation}
+r_{\text{node}}(t) \;=\; f_v\, r_{\text{veg}}(t) + \bigl(1-f_v\bigr)\, r_{\text{bare}}(t).
+\label{eq:r-node}
+\end{equation}
+
+For hsB cell $j$ with planform area $A_j$ [m$^2$], the lateral inflow to the channel network (discharge units) is
+\begin{equation}
+R_j(t) \;=\; r_{\text{node},j}(t)\, A_j \qquad [\mathrm{m^3\,s^{-1}}],
+\label{eq:Rj}
+\end{equation}
+and the reach-aggregated lateral inflow series is
+\begin{equation}
+R_L(t) \;=\; \sum_{j=1}^{N_x} R_j(t).
+\label{eq:RL}
+\end{equation}
+Hence, the propagation time from the hillslope to the nearest channel is neglected.
+
+\subsection{Transmission-zone drainage: partition to perched hsB and deep aquifer}
+
+The transmission-zone drainage $g_{tz}(x,t)$ (Part~2) provides percolation beyond the root zone. We partition $g_{tz}$ into a \emph{perched} component that directly recharges the hsB aquifer and a \emph{deep} component that bypasses the perched system:
+\begin{equation}
+N_{\text{hsB}}(x,t) \;=\; \bigl(1-\phi_d\bigr)\, g_{tz}(x,t),
+\qquad
+N_{\text{deep}}(x,t) \;=\; \phi_d\, g_{tz}(x,t),
+\label{eq:split}
+\end{equation}
+where $\phi_d\in[0,1]$ is the deep-aquifer fraction (user-specified or calibrated).
+
+The field $N_{\text{hsB}}(x,t)$ is the vertical recharge boundary that drives lateral subsurface flow in the hsB solver. The deep fraction $N_{\text{deep}}$ can be treated as (i) a loss from the perched system, or (ii) a slow baseflow reservoir feeding the outlet. A parsimonious deep-reservoir closure is
+\begin{equation}
+\frac{dS_D}{dt} \;=\; \int_0^{L} N_{\text{deep}}(x,t)\, w(x)\, dx \;-\; Q_D(t),
+\qquad
+Q_D(t) \;=\; k_D\, S_D(t),
+\label{eq:deep}
+\end{equation}
+where $S_D$ is deep storage, $Q_D$ the deep baseflow discharge at the outlet, $w(x)$ the planform width, and $k_D>0$ a reservoir coefficient. Setting $k_D=0$ retains water in the deep store without return flow during the run; it remains part of the water balance. Alternatively, $k_D$ can be estimated with recession analysis. One can define the master recession curve and partition the flow discharges into rapid-perched, Boussinesq aquifer, and low-deep aquifer flows. By fitting a power-law relationship for the slow part of the recession, one can estimate $k_D$, especially if a linear reservoir is assumed.
+
+\subsection{Hillslope baseflow from hsB (instantaneous at the outlet)}
+
+Given the perched-aquifer recharge field $N_{\text{hsB}}(x,t)$ from Part~2, the hsB module computes lateral groundwater flow along a 1D hillslope using a conservative finite-volume formulation of the storage--Boussinesq equations (see the accompanying hsB manual). The prognostic state is the storage per unit-$x$,
+\begin{equation}
+S(x,t) \;=\; f\,w(x)\,h(x,t), \qquad h(x,t)\ge 0,
+\label{eq:hsb-state}
+\end{equation}
+with drainable porosity $f$, planform width $w(x)>0$, and water-table height $h$ above bedrock. Over each cell $[x_{i-\frac12},x_{i+\frac12}]$, conservation reads
+\begin{equation}
+\frac{\mathrm d}{\mathrm dt}\int_{x_{i-\frac12}}^{x_{i+\frac12}} S\,\mathrm dx
+\;=\;
+Q\!\left(x_{i-\frac12},t\right) \;-\; Q\!\left(x_{i+\frac12},t\right)
+\;+\; \int_{x_{i-\frac12}}^{x_{i+\frac12}} N_{\text{hsB}}(x,t)\,w(x)\,\mathrm dx,
+\label{eq:hsb-fv}
+\end{equation}
+where the Dupuit--Boussinesq discharge along $x$ is split into a diffusive gradient term and a downslope drift term,
+\begin{equation}
+Q(x,t) \;=\; -\frac{k}{f}
+\left[
+S(x,t)\,\cos\iota\,\frac{\partial h}{\partial x}(x,t)
+\;+\; S(x,t)\,\sin\iota
+\right].
+\label{eq:hsb-flux}
+\end{equation}
+
+\paragraph{Finite volumes and face fluxes.}
+We store $S_i(t)\approx S(x_i,t)$ at cell centers. Face fluxes $Q_{i+\frac12}$ are assembled with a robust split:
+\begin{align}
+Q_{i+\frac12}
+&= Q^{\text{diff}}_{i+\frac12} + Q^{\text{adv}}_{i+\frac12} + Q^{\text{num}}_{i+\frac12}, \\
+Q^{\text{diff}}_{i+\frac12}
+&= -\frac{k\cos\iota}{f}\;S^{H}_{i+\frac12}\;\frac{h_{i+1}-h_i}{x_{i+1}-x_i},\qquad
+S^{H}_{i+\frac12}=\frac{2\,\widehat S_i\,\widehat S_{i+1}}{\widehat S_i+\widehat S_{i+1}},\\
+Q^{\text{adv}}_{i+\frac12}
+&= -\frac{k\sin\iota}{f}\;S^{\text{up}}_{i+\frac12},\qquad
+S^{\text{up}}_{i+\frac12}=\begin{cases} S_i, & \text{downslope flow},\\ S_{i+1}, & \text{upslope (rare)},\end{cases}\\
+Q^{\text{num}}_{i+\frac12}
+&= \tfrac12\,a\,(S_i-S_{i+1}),\qquad a=2\left|\frac{k\sin\iota}{f}\right|.
+\end{align}
+A small head floor inside $\widehat S$ keeps $S^{H}$ strictly positive near the seepage face, improving robustness.
+
+\paragraph{Time integration and nonlinear iteration.}
+The semi-discrete system is advanced by a $\theta$-method (default $\theta=1$, backward Euler):
+\begin{equation}
+\frac{S^{n+1}_i-S^n_i}{\Delta t}
+\;=\;
+-\frac{Q_{i+\frac12}(S^{n+\theta})-Q_{i-\frac12}(S^{n+\theta})}{\Delta x_i}
+\;+\; \bigl[N_{\text{hsB}}\,w\bigr]^n_i,
+\label{eq:hsb-theta}
+\end{equation}
+with Picard linearization and relaxation to resolve the nonlinearity $h=S/(f\,w)$ inside $Q(\cdot)$. In the native-forcing mode, internal substeps $\Delta t_{\text{sub}}$ are chosen adaptively via advective and diffusive CFL-like limits then exactly tile each forcing interval. Python also checks convergence and retries failed substeps; the forcing-interval mean discharge and final state are reported for each row.
+
+\paragraph{Boundary conditions and sign convention.}
+A seepage boundary at the outlet imposes $h(0,t)=0$ (Dirichlet head), closed by a one-sided gradient for $Q^{\text{diff}}$; the divide enforces $Q(L,t)=0$. Internally, outward subsurface flow at the outlet face $x=\tfrac12$ is negative: $Q_{\frac12}(t)<0$.
+
+\paragraph{Finite thickness and saturation-excess.}
+If a finite aquifer thickness $D$ is specified, the solver clips $h\le D$ each substep and converts any storage overflow to an outlet-equivalent saturation-excess discharge $Q_{\text{surf,hsB}}$ to preserve mass. In Python, overflow enters the surface-routing inflow once. If fill-spill is enabled, it first fills remaining TZ and RZ capacity at the originating node, and the remainder enters routing.
+
+\paragraph{Mass-balance diagnostics.}
+At every accepted step, the code reports a domain-integrated residual in volume units, computed from the accepted flux divergence, recharge source, and any overflow sink; this residual should remain near machine/iteration tolerances.
+
+\paragraph{Outlet baseflow.}
+The instantaneous \emph{baseflow} contributed by the perched aquifer is the outward-positive outlet flux
+\begin{equation}
+Q_{\text{base}}(t) \;=\; -\,Q_{\frac12}(t),
+\label{eq:hsb-qbase}
+\end{equation}
+which is added directly by default. Python can optionally route baseflow through the same channel kernel. In post-processing, $Q_{\text{base}}$ can be converted to an areal rate (e.g., mm\,day$^{-1}$) by dividing by the hillslope plan area $A_{\text{hs}}=\sum_i w_i\Delta x_i$ and multiplying by $1000\times 86400$.
+
+
+\subsection{Channel routing of surface runoff (linearized de Saint--Venant)}
+
+Surface runoff produced on the hillslope is routed through the channel network using the analytic impulse response of the \emph{linearized de Saint--Venant} model. The (drift--diffusion) impulse response at downstream distance $x$ is
+\begin{equation}
+q_c(x,t) \;=\; \frac{x}{\sqrt{2\pi}\, d\, t^{3/2}}\;
+\exp\!\left[-\,\frac{\bigl(x - c\, t\bigr)^2}{2\, d^2\, t}\right],
+\label{eq:qcx}
+\end{equation}
+where $c$ [m\,s$^{-1}$] is the celerity and $d^2$ [m$^2$\,s$^{-1}$] the effective diffusion coefficient (functions of hydraulic and geometric properties of the channel network).
+
+Let $W_c(x)$ be the normalized channel width function (probability density over flow distances to the outlet). The \emph{network unit hydrograph} is obtained by geomorphic averaging:
+\begin{equation}
+u_c(t) \;=\; \int_{0}^{\infty} q_c(x,t)\, W_c(x)\, dx,
+\label{eq:uc}
+\end{equation}
+which satisfies $\int_0^\infty u_c(t)\,dt = 1$. The routed surface-flow discharge at the outlet is the convolution of lateral inflows with $u_c$:
+\begin{equation}
+Q_{\text{surf}}(t) \;=\; \int_{0}^{t} R_L(\tau)\, u_c\!\bigl(t-\tau\bigr)\, d\tau.
+\label{eq:Qsurf}
+\end{equation}
+In practice, $u_c(t)$ is precomputed from \eqref{eq:qcx}--\eqref{eq:uc} given $(c,d^2)$ and $W_c$, and \eqref{eq:Qsurf} is evaluated efficiently by FFT-based convolution on the model time step.
+
+
+\subsection{Total outlet discharge and bookkeeping}
+
+The total outward-positive discharge at the outlet is the sum of routed surface flow, instantaneous hsB baseflow, and (optionally) deep-reservoir outflow:
+\begin{equation}
+Q_{\text{tot}}(t) \;=\; Q_{\text{surf}}(t) \;+\; Q_{\text{base}}(t) \;+\; Q_D(t).
+\label{eq:Qtot}
+\end{equation}
+Mass conservation is enforced by consistent use of units and areas: node runoff depths $r_{\text{node}}$ are converted to discharges via \eqref{eq:Rj}, transmission-zone drainage is split by \eqref{eq:split}, and hsB receives $N_{\text{hsB}}$ as its recharge field. The deep component remains in storage or returns through the linear reservoir in Eq.~\eqref{eq:deep}. Upward aquifer-to-TZ transfer is subtracted from net perched recharge as in Eq.~\eqref{eq:split_recharge}.
+
+\subsection{Implementation notes}
+
+\begin{itemize}
+  \item \textbf{Units.} Work internally with m\,s$^{-1}$ for fluxes and m$^3$\,s$^{-1}$ for discharges. For plotting, convert to mm\,day$^{-1}$ by dividing discharges by $A_{\text{hs}}$ and multiplying by $1000\times 86400$.
+  \item \textbf{Sequence per time step.} (i) compute $r_{\text{node},j}$ and $R_j$; (ii) form $R_L$; (iii) compute $N_{\text{hsB}}$ and advance hsB to get $Q_{\text{base}}$; (iv) convolve $R_L$ with $f_c$ to obtain $Q_{\text{surf}}$; (v) advance deep reservoir \eqref{eq:deep}; (vi) assemble $Q_{\text{tot}}$ via \eqref{eq:Qtot}.
+  \item \textbf{Parameters.} The routing can be parameterized directly by $(c,d^2)$ and a pre-estimated $\omega_c(x)$ from the channel network. The deep branch uses $(\phi_d,k_D)$.
+  \item \textbf{Special case (finite aquifer thickness).} Overflow due to finite $D$ is included once in surface inflow before channel routing. The diagnostic overflow series must not be added again to the final outlet discharge.
+\end{itemize}
+
+\newpage
+
+
+% ============================================================
+% hsB--SM Technical Manual
+% Energy Balance and Evapotranspiration Partitioning
+% (explicit soil-moisture stress functions, FW94 notation)
+% ============================================================
+
+\section{Energy Balance and Evapotranspiration Partitioning}
+\label{sec:energy_ET_partitioning}
+
+Penman--Monteith supplies three patch-scale potential rates, wet-canopy evaporation, dry-canopy transpiration, and bare-soil evaporation. They are converted to ground-area demand by multiplying the canopy components by $f_v$ and the bare-soil component by $1-f_v$. The optional snow-cover fraction further multiplies bare-soil demand by $1-\mathrm{SFC}$. These potential rates enter the storage updates described in Sections~\ref{sec:canopy} and \ref{sec:rootzone}.
+
+The wet-canopy actual rate is limited by intercepted water, including the within-step rain input. Root-zone transpiration and soil evaporation use the pressure-head stress factors and the shared donor-water limits in Eqs.~\eqref{eq:etrz_limit}--\eqref{eq:esoil_limit}. The active coupling therefore includes stress factors as well as availability limits. The older independent-bucket availability-only formulation is not the Python default.
+
+The node-scale actual evapotranspiration rate is
+\begin{equation}
+E=E_{\mathrm{can}}+T+E_s.
+\label{eq:et_sum_actual}
+\end{equation}
+All terms are water depth rates in m\,s$^{-1}$ over ground area. Canopy evaporation is debited from the canopy store; transpiration and soil evaporation are debited from RZ. Internal hydraulic exchanges redistribute water and do not contribute to atmospheric loss. The model calculates potential rates using PM but does not independently solve surface temperature or close the sensible-heat energy balance.
+
+\section{Computation of Potential Evapotranspiration and Aerodynamic Resistances}
+\label{sec:potET_ra_rs}
+
+\paragraph{Active implementation.}
+The equations below describe the general PM framework. The active MATLAB/Python evaluation uses one common aerodynamic resistance and net-radiation value for all three potential components, with ground heat fraction zero, longwave emissivity 0.98, von Karman constant 0.41, $d=0.65h_c$, $z_{0m}=0.10h_c$, and $z_{0h}=0.10z_{0m}$ unless explicitly overridden. Canopy resistance is $r_{c,\min}/\max(\mathrm{LAI},0.1)$ and bare-soil resistance defaults to 157.70 s/m. Separate surface-temperature solutions, stability corrections, and the optional general resistance schemes below are not active options in Python version 0.1.0.
+
+
+In the hsB--SM framework, the evapotranspiration flux is decomposed into wet-canopy evaporation ($e_{wc}$), dry-canopy transpiration ($e_{ac}$), and bare-soil evaporation ($e_{bs}$), and then area-weighted by the vegetated fraction $f_v$ and bare fraction $f_s=1-f_v$ (cf.\ Section~\ref{sec:energy_ET_partitioning}). To maintain physical consistency with the surface energy balance while remaining parsimonious, each component is first evaluated at an \emph{atmosphere-limited} (potential) rate using a Penman--Monteith (PM) formulation with appropriate aerodynamic and surface (canopy or soil) resistances; these potentials are then converted to \emph{actual} fluxes by storage and soil-moisture constraints (Section~\ref{sec:energy_ET_partitioning}). Throughout, we write $\lambda \equiv L_v$ for the latent heat of vaporization.
+
+\subsection{Thermodynamic and psychrometric preliminaries}
+\label{subsec:thermo_psychro}
+
+All PM-based potentials use the same thermodynamic inputs at a reference height: air temperature $T_a$ [K], air pressure $P$ [Pa], relative humidity $\mathrm{RH}$ [$-$], and wind speed $U$ [m\,s$^{-1}$]. The slope of the saturation vapor pressure curve, the saturation and actual vapor pressures, the vapor pressure deficit (VPD), the air density, and the psychrometric constant are
+\begin{equation}
+e_s(T_a) \;=\; e_0 \,\exp\!\left(\frac{L_v}{R_v}\left[\frac{1}{T_0}-\frac{1}{T_a}\right]\right),
+\qquad e_a \;=\; \mathrm{RH}\; e_s(T_a),
+\label{eq:es_ea}
+\end{equation}
+\begin{equation}
+\Delta \;\equiv\; \frac{d e_s}{dT}\Big|_{T_a},
+\qquad \mathrm{VPD} \;=\; e_s(T_a) - e_a,
+\label{eq:Delta_VPD}
+\end{equation}
+\begin{equation}
+\rho_a \;=\; \frac{P}{R_d\,T_a}\left(1 - 0.378\,\frac{e_a}{P}\right),
+\qquad
+\gamma_{\mathrm{psy}} \;=\; \frac{c_p\,P}{\varepsilon\,L_v},
+\label{eq:rho_gamma}
+\end{equation}
+where $e_0=611.2$~Pa, $T_0=273.15$~K, $R_v$ and $R_d$ are the specific gas constants for water vapor and dry air, $c_p$ is the specific heat of air at constant pressure, and $\varepsilon=0.622$. For implementation, \eqref{eq:es_ea}--\eqref{eq:rho_gamma} can be replaced by standard meteorological approximations (e.g., Tetens for $e_s$) provided unit consistency is preserved.
+
+\subsection{Net radiation and ground heat flux for components}
+\label{subsec:Rn_G}
+
+The PM potentials require the \emph{available energy} $R_n-G$ at the surface of interest. We distinguish a canopy-facing surface and a soil-facing surface, with (possibly) different albedos and emissivities. To avoid solving for surface temperatures explicitly, we evaluate the component net radiations with pragmatic parameterizations and use simple fractions for ground heat fluxes:
+\begin{equation}
+R_{n,c} \;=\; (1-\alpha_c)\,S_\downarrow \;+\; \epsilon_c\,(L_\downarrow - \sigma T_a^4),
+\qquad
+G_c \;=\; g_c\, R_{n,c},
+\label{eq:Rn_canopy}
+\end{equation}
+\begin{equation}
+R_{n,s} \;=\; (1-\alpha_s)\,S_\downarrow \;+\; \epsilon_s\,(L_\downarrow - \sigma T_a^4),
+\qquad
+G_s \;=\; g_s\, R_{n,s},
+\label{eq:Rn_soil}
+\end{equation}
+where $S_\downarrow$ and $L_\downarrow$ are downwelling shortwave and longwave radiation, $\alpha_{(\cdot)}$ and $\epsilon_{(\cdot)}$ are component albedo and emissivity, $\sigma$ is the Stefan--Boltzmann constant, and $(g_c,g_s)$ are empirical ground heat flux factors (e.g., $g_c\simeq 0.05$ for vegetated canopies, $g_s\simeq 0.30$ for bare soil). For simulations on a daily basis, $g_c$ and $g_s$ can be safely assumed as 0. When the node-scale forcing supplies only a single $R_n$, a practical approximation is to distribute it by areal fraction and use \eqref{eq:Rn_canopy}--\eqref{eq:Rn_soil} to adjust for differing albedos:
+\begin{equation}
+\begin{cases}
+\displaystyle
+R_{n,c}^{\text{(node)}} \;=\; f_v\,R_n\,
+\frac{1-\alpha_c}{\,f_v(1-\alpha_c)+(1-f_v)(1-\alpha_s)\,},\\[10pt]
+\displaystyle
+R_{n,s}^{\text{(node)}} \;=\; (1-f_v)\,R_n\,
+\frac{1-\alpha_s}{\,f_v(1-\alpha_c)+(1-f_v)(1-\alpha_s)\,}.
+\end{cases}
+\label{eq:Rn_partition_simplified}
+\end{equation}
+Equations \eqref{eq:Rn_canopy}--\eqref{eq:Rn_partition_simplified} yield the required $R_n-G$ terms for canopy and soil PM evaluations without iterative surface-temperature closure.
+
+\subsection{Aerodynamic resistances ($r_a$) with canopy displacement}
+\label{subsec:ra}
+
+Aerodynamic transfer is represented by bulk resistances derived from Monin--Obukhov similarity in neutral (or stability-corrected) conditions. For a canopy of height $h_c$ with displacement height $d$ and roughness lengths $(z_{0m},z_{0h})$ for momentum and heat, the \emph{neutral} aerodynamic resistance between the reference height $z_{\!r}$ and the canopy (or soil) surface is
+\begin{equation}
+r_a \;=\; \frac{1}{\kappa^2\,U(z_{\!r})}\;
+\ln\!\left(\frac{z_{\!r}-d}{z_{0m}}\right)\,
+\ln\!\left(\frac{z_{\!r}-d}{z_{0h}}\right),
+\label{eq:ra_neutral}
+\end{equation}
+where $\kappa=0.4$ is von Kármán's constant. For vegetated surfaces we take $d \approx 0.67\,h_c$, $z_{0m}\approx 0.123\,h_c$, and $z_{0h} = z_{0m}\,\exp(-kB^{-1})$ with $kB^{-1}\!\in\![2,8]$ (site dependent). For bare soil, $d=0$ and typical values are $z_{0m}\sim 10^{-3}$--$10^{-2}$~m, $z_{0h}\sim 10^{-4}$--$10^{-3}$~m. If stability corrections are desired, \eqref{eq:ra_neutral} generalizes to
+\begin{equation}
+r_a \;=\; \frac{1}{\kappa^{2}\,U(z_{\!r})}\,
+\Bigl[\ln\!\Bigl(\tfrac{z_{\!r}-d}{z_{0m}}\Bigr)-\psi_m\Bigr]\,
+\Bigl[\ln\!\Bigl(\tfrac{z_{\!r}-d}{z_{0h}}\Bigr)-\psi_h\Bigr],
+\label{eq:ra_stability}
+\end{equation}
+with $\psi_{m,h}$ the integrated stability functions (Monin--Obukhov). In practice we recommend \eqref{eq:ra_neutral} unless strong stratification is known.
+
+\subsection{Surface (canopy/soil) resistances ($r_s$)}
+\label{subsec:rs}
+
+The PM denominator requires a bulk surface resistance $r_s$ appropriate to each component. For a \emph{wet canopy}, the evaporating surface is effectively saturated and aerodynamic control dominates, hence
+\begin{equation}
+r_{s,wc} \;\approx\; 0.
+\label{eq:rs_wc}
+\end{equation}
+For \emph{dry-canopy transpiration}, we use a big-leaf bulk canopy resistance $r_c$ that aggregates stomatal behavior over the leaf area:
+\begin{equation}
+r_{s,ac} \;\equiv\; r_c \;=\; \frac{r_{s,\min}}{\mathrm{LAI}\;\phi_Q\,\phi_{\mathrm{VPD}}\,\phi_T},
+\label{eq:rc_bigleaf}
+\end{equation}
+where $r_{s,\min}$ is a species/site parameter (s\,m$^{-1}$), LAI is the one-sided leaf area index, and $(\phi_Q,\phi_{\mathrm{VPD}},\phi_T)\in(0,1]$ are Jarvis-type modifiers for radiation, vapor-pressure deficit, and temperature. In the hsB--SM \emph{potential} evaluation we may set $\phi_Q=\phi_{\mathrm{VPD}}=\phi_T=1$ (unstressed, well-lit leaves), leaving water limitation to the root-zone stress multiplier (Section~\ref{subsec:rz_stress}):
+\begin{equation}
+r_{s,ac}^{\,t} \;=\; \frac{r_{s,\min}}{\mathrm{LAI}}.
+\label{eq:rc_potential}
+\end{equation}
+For \emph{bare soil}, the surface resistance at potential is small when the skin is wet and increases sharply as the skin dries. A general bare-soil potential can use a prescribed surface resistance,
+\begin{equation}
+r_{s,bs}^{\,t} \;\approx\; r_{s,\mathrm{wet}} \;\in\; [10,\,50]\ \mathrm{s\,m^{-1}},
+\label{eq:rs_bs_potential}
+\end{equation}
+and rely on the stage-2 capacity to throttle the actual evaporation.
+
+\subsection{Penman--Monteith potentials for each component}
+\label{subsec:PM_potentials}
+
+Given the component available energies $R_{n,c}-G_c$ and $R_{n,s}-G_s$, the shared meteorological terms ($\Delta,\rho_a,c_p,\gamma_{\mathrm{psy}}$, VPD), and the appropriate resistances $(r_a, r_s)$, the atmosphere-limited (potential) rates are computed as
+\begin{equation}
+e_{wc}^{\,t} \;=\; \frac{\Delta\,(R_{n,c}-G_c)\;+\;\rho_a c_p\,\dfrac{\mathrm{VPD}}{r_{a,c}}}
+{\lambda\rho_w\left[\Delta \;+\; \gamma_{\mathrm{psy}}\left(1+\dfrac{r_{s,wc}}{r_{a,c}}\right)\right]},
+\qquad r_{s,wc}\approx 0,
+\label{eq:PM_wc}
+\end{equation}
+\begin{equation}
+e_{ac}^{\,t} \;=\; \frac{\Delta\,(R_{n,c}-G_c)\;+\;\rho_a c_p\,\dfrac{\mathrm{VPD}}{r_{a,c}}}
+{\lambda\rho_w\left[\Delta \;+\; \gamma_{\mathrm{psy}}\left(1+\dfrac{r_{s,ac}^{\,t}}{r_{a,c}}\right)\right]},
+\qquad r_{s,ac}^{\,t}=\frac{r_{s,\min}}{\mathrm{LAI}},
+\label{eq:PM_ac}
+\end{equation}
+\begin{equation}
+e_{bs}^{\,t} \;=\; \frac{\Delta\,(R_{n,s}-G_s)\;+\;\rho_a c_p\,\dfrac{\mathrm{VPD}}{r_{a,s}}}
+{\lambda\rho_w\left[\Delta \;+\; \gamma_{\mathrm{psy}}\left(1+\dfrac{r_{s,bs}^{\,t}}{r_{a,s}}\right)\right]},
+\qquad r_{s,bs}^{\,t}\approx r_{s,\mathrm{wet}}.
+\label{eq:PM_bs}
+\end{equation}
+Here $r_{a,c}$ and $r_{a,s}$ are aerodynamic resistances evaluated with \eqref{eq:ra_neutral} (or \eqref{eq:ra_stability}) using canopy and soil roughness parameters, respectively. Latent heat fluxes in W\,m$^{-2}$ are divided by $\lambda\rho_w$ to obtain water depth rates in m\,s$^{-1}$, with water density $\rho_w=1000$ kg\,m$^{-3}$.
+
+\subsection{From potentials to actual component fluxes}
+\label{subsec:pot_to_actual_link}
+
+The potential rates above are defined per unit area of the corresponding vegetation or bare-soil patch. Section~\ref{sec:energy_ET_partitioning} converts them to ground-area demands. The canopy update includes rainfall intercepted within the step; the coupled soil update applies pressure-head stress and shares finite root-zone water between transpiration and soil evaporation. The resulting ground-area fluxes are summed once in Eq.~\eqref{eq:et_sum_actual}. No additional multiplication by vegetation fraction is applied to those actual rates. The older independent stage-2 evaporation closure is not used by the active coupled soil module.
+
+\subsection{General options and active defaults}
+\label{subsec:defaults}
+
+The preceding equations retain the general resistance and energy-partition options discussed in the MATLAB manual. For reproducible Python runs, use the active choices stated at the beginning of this section and the values returned by \texttt{default\_parameters()}. Changing a conceptual option in the general framework does not activate it in the code. Supported parameter overrides belong in the JSON configuration and are exported with each simulation.
+
+
+% ============================================================
+% Reference Tables -- Variables and Parameters
+% ============================================================
+\input{python_reference}
+
+\section{Reference Tables: Variables, Parameters, and Units}
+The following tables retain the general MATLAB notation. Python parameter names and active choices are specified in Section~\ref{sec:python_reference}; legacy optional closures in these tables are not automatically active.
+\label{sec:ref_tables}
+
+This appendix consolidates the notation, physical meaning, and units used throughout the hsB--SM model. Fluxes are expressed in \si{m\,s^{-1}} unless stated otherwise, discharges in \si{m^3\,s^{-1}}, and storages as depth equivalents in \si{m} (per unit plan area) unless explicitly volumetric. Parameters follow SI conventions and are internally converted when read from input tables.
+
+% ------------------------------------------------------------------
+\subsection*{A. Meteorology and Thermodynamics (shared by PM)}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$T_a$ & Air temperature & \si{K} \\
+$P$ & Air pressure & \si{Pa} \\
+$\mathrm{RH}$ & Relative humidity & $-$ \\
+$U(z_r)$ & Wind speed at reference height $z_r$ & \si{m\,s^{-1}} \\
+$z_r$ & Reference height for meteorological measurements & \si{m} \\
+$S_\downarrow$ & Downwelling shortwave radiation & \si{W\,m^{-2}} \\
+$L_\downarrow$ & Downwelling longwave radiation & \si{W\,m^{-2}} \\
+$R_n$ & Net radiation at surface & \si{W\,m^{-2}} \\
+$G$ & Ground (or canopy) heat flux & \si{W\,m^{-2}} \\
+$e_s(T_a)$ & Saturation vapor pressure & \si{Pa} \\
+$e_a$ & Actual vapor pressure & \si{Pa} \\
+$\mathrm{VPD}=e_s-e_a$ & Vapor pressure deficit & \si{Pa} \\
+$\Delta$ & Slope of $e_s(T)$ at $T_a$ & \si{Pa\,K^{-1}} \\
+$\rho_a$ & Moist-air density & \si{kg\,m^{-3}} \\
+$c_p$ & Specific heat of air at constant pressure & \si{J\,kg^{-1}\,K^{-1}} \\
+$\gamma$ & Psychrometric constant & \si{Pa\,K^{-1}} \\
+$L_v$ & Latent heat of vaporization & \si{J\,kg^{-1}} \\
+$\sigma$ & Stefan--Boltzmann constant & \si{W\,m^{-2}\,K^{-4}} \\
+$\varepsilon$ & Ratio of molecular weights ($M_w/M_d\!\approx\!0.622$) & $-$ \\
+$R_d, R_v$ & Gas constants (dry air, water vapor) & \si{J\,kg^{-1}\,K^{-1}} \\
+\bottomrule
+\end{longtable}
+
+% ------------------------------------------------------------------
+\subsection*{B. Penman--Monteith Potentials and Resistances}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$r_a$ & Aerodynamic resistance (neutral, with displacement) & \si{s\,m^{-1}} \\
+$r_{s,\mathrm{wetCan}}$ & Surface resistance of wet canopy (set to 0) & \si{s\,m^{-1}} \\
+$r_{s,\mathrm{dryCan}}$ & Canopy resistance for potential transpiration ($r_{c,\min}/\mathrm{LAI}$) & \si{s\,m^{-1}} \\
+$r_{s,\mathrm{bare}}$ & Bare-soil surface resistance at potential & \si{s\,m^{-1}} \\
+$r_{c,\min}$ & Minimum canopy (stomatal) resistance & \si{s\,m^{-1}} \\
+$\mathrm{LAI}$ & Leaf area index (one-sided) & $-$ \\
+$\alpha$ & Surface albedo & $-$ \\
+$\epsilon_{\mathrm{lw}}$ & Longwave emissivity & $-$ \\
+$f_G$ & Fraction of $R_n$ assigned to ground heat flux ($G=f_G R_n$) & $-$ \\
+$h_c$ & Canopy height & \si{m} \\
+$d$ & Displacement height ($\approx 0.67\,h_c$) & \si{m} \\
+$z_{0m}, z_{0h}$ & Roughness lengths for momentum and heat & \si{m} \\
+$\kappa$ & von Kármán constant ($\approx 0.41$) & $-$ \\
+$E_{\mathrm{PM}}$ & Potential evapotranspiration rate (generic) & \si{m\,s^{-1}} \\
+$e_{\mathrm{wetCan}}^{t}$ & Wet-canopy potential evaporation & \si{m\,s^{-1}} \\
+$e_{\mathrm{dryCan}}^{t}$ & Dry-canopy potential transpiration & \si{m\,s^{-1}} \\
+$e_{\mathrm{bare}}^{t}$ & Bare-soil potential evaporation & \si{m\,s^{-1}} \\
+\bottomrule
+\end{longtable}
+
+% ------------------------------------------------------------------
+\subsection*{C. Root Zone (water balance and stress)}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$W_{rz}$ & Root-zone water storage (depth-integrated) & \si{m} \\
+$z_{rz}$ & Root-zone depth & \si{m} \\
+$\theta_{rz}=W_{rz}/z_{rz}$ & Mean volumetric water content in root zone & $-$ \\
+$\theta_{w}$ & Wilting-point water content & $-$ \\
+$\theta_{fc}$ & Field-capacity water content & $-$ \\
+$\theta_{sat}$ & Saturation water content & $-$ \\
+$f_{\mathrm{stress}}^{(\mathrm{rz})}$ & Root-zone moisture-stress factor & $-$ \\
+$\eta_{rz}$ & Optional exponent controlling stress curvature & $-$ \\
+$P_{\mathrm{inf}}$ & Infiltration entering the root zone & \si{m\,s^{-1}} \\
+$q_{\mathrm{cap}}$ & Upward capillary flux from transmission zone & \si{m\,s^{-1}} \\
+$q_{\mathrm{perc}}$ & Percolation from root zone to transmission zone & \si{m\,s^{-1}} \\
+$e_{ac}$ & Actual canopy transpiration (after stress) & \si{m\,s^{-1}} \\
+$e_{\mathrm{soil}}$ & Bare-soil evaporation extracted from upper layer & \si{m\,s^{-1}} \\
+\bottomrule
+\end{longtable}
+
+% ------------------------------------------------------------------
+\subsection*{D. Transmission Zone (percolation and recharge)}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$W_{tz}$ & Transmission-zone water storage & \si{m} \\
+$z_{tz}$ & Transmission-zone thickness & \si{m} \\
+$\theta_{tz}=W_{tz}/z_{tz}$ & Mean volumetric water content in TZ & $-$ \\
+$\psi_{rz}, \psi_{tz}$ & Matric potentials (root and transmission zones) & \si{m} \\
+$K(\psi)$ & Unsaturated hydraulic conductivity (Van Genuchten--Mualem) & \si{m\,s^{-1}} \\
+$q_{\mathrm{cap}}$ & Capillary flux from TZ to RZ ($>0$ upward) & \si{m\,s^{-1}} \\
+$g_{tz}$ & Gravity drainage from TZ to aquifer (recharge) & \si{m\,s^{-1}} \\
+$N_{\mathrm{hsB}}$ & Recharge applied to the hsB aquifer ($N_{\mathrm{hsB}}=g_{tz}$) & \si{m\,s^{-1}} \\
+$N_{\mathrm{deep}}$ & Deep percolation fraction ($\phi_d g_{tz}$) & \si{m\,s^{-1}} \\
+$\phi_d$ & Fraction of recharge bypassing the perched system & $-$ \\
+\bottomrule
+\end{longtable}
+
+% ------------------------------------------------------------------
+\subsection*{E. Bare-Soil Stage-2 Capacity and Stress}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$e_{bs}$ & Bare-soil evaporation (actual) & \si{m\,s^{-1}} \\
+$e_{bs}^{t}$ & Bare-soil evaporation (potential) & \si{m\,s^{-1}} \\
+$e^\ast$ & Stage-2 exfiltration capacity & \si{m\,s^{-1}} \\
+$E_c$ & Cumulative exfiltration since last wetting & \si{m} \\
+$t_s$ & Time of last wetting (reset event) & \si{s} \\
+$\alpha_e$ & Stage-2 diffusive parameter (soil-drying control) & \si{m\,s^{-1/2}} \\
+$\varepsilon_t$ & Small time offset for numerical stability & \si{s} \\
+$\varepsilon_E$ & Small depth offset for $e^\ast(E_c)$ & \si{m} \\
+$f_{\mathrm{stress}}^{(\mathrm{sl})}$ & Soil-surface stress factor $\min(1, e^\ast/e_{bs}^{t})$ & $-$ \\
+\bottomrule
+\end{longtable}
+
+% ------------------------------------------------------------------
+\subsection*{F. hsB Aquifer and Deep Reservoir}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$x$ & Downslope coordinate & \si{m} \\
+$w(x)$ & Planform width function & \si{m} \\
+$S(x,t)$ & Cross-sectional storage per unit $x$ ($f\,w\,h$) & \si{m^2} \\
+$h(x,t)$ & Water-table height above bedrock & \si{m} \\
+$k$ & Saturated hydraulic conductivity (drainage) & \si{m\,s^{-1}} \\
+$f$ & Drainable porosity & $-$ \\
+$\iota$ & Local bedrock slope angle & \si{rad} \\
+$Q(x,t)$ & Along-slope subsurface discharge & \si{m^3\,s^{-1}} \\
+$Q_{\frac12}$ & Outlet flux (negative inward) & \si{m^3\,s^{-1}} \\
+$Q_{\text{base}}=-Q_{\frac12}$ & Outward-positive baseflow at outlet & \si{m^3\,s^{-1}} \\
+$A_{\mathrm{hs}}=\sum_i w_i\Delta x_i$ & Total hillslope plan area & \si{m^2} \\
+$S_D$ & Deep-aquifer storage (linear reservoir) & \si{m^3} \\
+$Q_D$ & Deep baseflow discharge ($Q_D=k_D S_D$) & \si{m^3\,s^{-1}} \\
+$k_D$ & Deep-reservoir coefficient & \si{s^{-1}} \\
+\bottomrule
+\end{longtable}
+
+% ------------------------------------------------------------------
+\subsection*{G. Surface Runoff and Channel Routing}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$f_{\mathrm{cap}}$ & Infiltration capacity at surface & \si{m\,s^{-1}} \\
+$i(t)$ & Actual infiltration rate ($\min(P_{\mathrm{net}}, f_{\mathrm{cap}})$) & \si{m\,s^{-1}} \\
+$r_{\mathrm{ex}}$ & Infiltration-excess runoff & \si{m\,s^{-1}} \\
+$r_{\mathrm{sat}}$ & Saturation-excess runoff & \si{m\,s^{-1}} \\
+$r_{\mathrm{node}}$ & Node-averaged runoff (veg/bare weighted) & \si{m\,s^{-1}} \\
+$A_j$ & Plan area of node or grid cell $j$ & \si{m^2} \\
+$R_j$ & Lateral inflow from cell $j$ ($r_{\mathrm{node}}A_j$) & \si{m^3\,s^{-1}} \\
+$R_L$ & Catchment lateral inflow (sum over nodes) & \si{m^3\,s^{-1}} \\
+$c$ & Channel celerity (linear routing) & \si{m\,s^{-1}} \\
+$d^2$ & Channel dispersion parameter & \si{m^2\,s^{-1}} \\
+$Q_{\text{surf}}$ & Routed surface discharge at outlet & \si{m^3\,s^{-1}} \\
+$Q_{\text{tot}}$ & Total outlet discharge ($Q_{\text{surf}}+Q_{\text{base}}+Q_D$) & \si{m^3\,s^{-1}} \\
+\bottomrule
+\end{longtable}
+
+% ------------------------------------------------------------------
+\subsection*{H. Numerical Options and Diagnostics}
+\begin{longtable}{@{}lll@{}}
+\toprule
+Symbol & Description & Units \\ \midrule
+$\theta$ & Time-integration weight ($0$ explicit, $1$ implicit) & $-$ \\
+$\omega$ & Picard relaxation factor (iterative update) & $-$ \\
+$\texttt{picard\_max}$ & Maximum Picard iterations per time step & $-$ \\
+$\texttt{picard\_tol}$ & Convergence tolerance on storage increment & \si{m^2} \\
+$h_{\mathrm{floor}}$ & Minimum head for harmonic means & \si{m} \\
+$C_{\mathrm{adv}},C_{\mathrm{diff}}$ & CFL stability limits (advective, diffusive) & $-$ \\
+$\eta_{\max}$ & Max fractional change per sub-step & $-$ \\
+$\Delta t_{\min},\Delta t_{\max}$ & Sub-step bounds & \si{s} \\
+$\mathrm{MB}$ & Step-wise mass-balance residual (volumetric) & \si{m^3} \\
+\bottomrule
+\end{longtable}
+
+
+
+
+
+\newpage
+\section*{How to Cite This Model}
+\addcontentsline{toc}{section}{How to Cite This Model}
+Gomes Junior, M. N. (2026). \textit{hsB--SM: coupled hillslope-storage Boussinesq and soil-moisture model, Python implementation}, version 0.1.0. Repository: \url{https://github.com/marcusnobrega-eng/1D_hsb-SM-python}. Include the exact commit or release used in an analysis. The original MATLAB implementation is available at \url{https://github.com/marcusnobrega-eng/1D_hsb-SM}. No DOI is asserted for this Python release.
+
+\section*{License and Reuse}
+\addcontentsline{toc}{section}{License and Reuse}
+The code and documentation are distributed under the MIT License included in the Python repository. Retain the copyright and permission notice in redistributed copies. Example-data attribution and preparation are documented with the inputs. Citation is requested for scientific reproducibility and does not add a restriction to the MIT License.
+
+\nocite{*}
+\bibliographystyle{apalike}
+\bibliography{References.bib}
+
+
+\end{document}

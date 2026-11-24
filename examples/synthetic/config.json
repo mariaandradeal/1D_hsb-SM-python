@@ -1,0 +1,27 @@
+{
+  "geometry": "geometry.csv",
+  "channel": {
+    "file": "channel.csv",
+    "slope": 0.02
+  },
+  "forcing": {
+    "file": "forcing.csv",
+    "lai_basis": "vegetated"
+  },
+  "dt": 3600,
+  "parameters": {
+    "Flags": {
+      "interception": true
+    },
+    "Deep": {
+      "phi_d": 0.2
+    },
+    "Hill": {
+      "iota_rad": 0.1
+    }
+  },
+  "metadata": {
+    "site": "Synthetic demonstration",
+    "precipitation_total_mm": 300.0
+  }
+}

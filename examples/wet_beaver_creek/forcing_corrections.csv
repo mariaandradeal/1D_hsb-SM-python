@@ -1,0 +1,12 @@
+date,column,original,prepared,rule
+2016-11-23,FVC,0.0,0.23333365350000002,Linear interpolation between adjacent valid daily values
+2022-04-08,FVC,,0.11907432949999999,Linear interpolation between adjacent valid daily values
+2016-02-17,LAI,,0.42000061759999996,Linear interpolation between adjacent valid daily values
+2016-02-18,LAI,,0.31500046319999997,Linear interpolation between adjacent valid daily values
+2016-02-19,LAI,,0.21000030879999998,Linear interpolation between adjacent valid daily values
+2016-02-20,LAI,,0.10500015439999999,Linear interpolation between adjacent valid daily values
+2022-10-18,LAI,,0.13782655900000002,Linear interpolation between adjacent valid daily values
+2022-10-19,LAI,,0.27565311800000003,Linear interpolation between adjacent valid daily values
+2022-10-20,LAI,,0.41347967700000005,Linear interpolation between adjacent valid daily values
+2022-10-21,LAI,,0.5513062360000001,Linear interpolation between adjacent valid daily values
+2016-11-23,Albd_unitless,-32.767,0.108592065,Linear interpolation between adjacent valid daily values

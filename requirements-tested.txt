@@ -1,0 +1,8 @@
+# Versions used for the local Windows/Python 3.12 validation.
+# The supported lower bounds are specified independently in pyproject.toml.
+numpy==2.5.5
+scipy==1.18.1
+pandas==3.1.1
+matplotlib==3.11.2
+pytest==9.2.0
+openpyxl==3.1.5

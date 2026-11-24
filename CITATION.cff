@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "Please cite the model and the exact commit used in your analysis."
+type: software
+title: "hsB-SM: coupled hillslope-storage Boussinesq and soil-moisture model, Python implementation"
+authors:
+  - family-names: "Gomes Júnior"
+    given-names: "Marcus Nóbrega"
+    orcid: "https://orcid.org/0000-0002-8250-8195"
+version: 0.1.0
+date-released: 2026-11-24
+repository-code: "https://github.com/marcusnobrega-eng/1D_hsb-SM-python"
+license: MIT

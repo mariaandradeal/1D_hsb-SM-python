@@ -1,0 +1,79 @@
+\section{Quick Start: Running hsB--SM in Python}
+\label{sec:python_quickstart}
+
+This manual extends the original MATLAB formulation with a standalone Python implementation. The Python repository is \url{https://github.com/marcusnobrega-eng/1D_hsb-SM-python}. The original MATLAB code remains at \url{https://github.com/marcusnobrega-eng/1D_hsb-SM}. Python version 0.1.0 follows the active coupled model and corrects specific water-accounting errors, as detailed in Section~\ref{sec:python_reference}. Full-model hydrographs can therefore differ between implementations.
+
+\subsection{Install and run the bundled example}
+
+Install Python 3.11 or newer and Git. Open a terminal in a directory where you want to keep the model, then download the repository and create an isolated environment.
+
+\begin{lstlisting}[language={},caption={Download the Python repository.}]
+git clone https://github.com/marcusnobrega-eng/1D_hsb-SM-python.git
+cd 1D_hsb-SM-python
+python -m venv .venv
+\end{lstlisting}
+
+On Windows PowerShell, the following commands use the environment directly. Activation is optional and no change to the system execution policy is required.
+
+\begin{lstlisting}[language={},caption={Install and run on Windows.}]
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m hsbsm run examples/synthetic/config.json --output outputs/quickstart
+\end{lstlisting}
+
+On macOS or Linux, activate the environment and run the same model command.
+
+\begin{lstlisting}[language={},caption={Install and run on macOS or Linux.}]
+source .venv/bin/activate
+python -m pip install -e .
+python -m hsbsm run examples/synthetic/config.json --output outputs/quickstart
+\end{lstlisting}
+
+The synthetic example contains 120 hourly intervals and two prescribed storms. It enables canopy interception and a deep-recharge fraction of 0.2. The terminal reports simulation progress and the relative water-balance error. Open \path{outputs/quickstart/hydrograph.png} to inspect rainfall, actual evapotranspiration, discharge components, and soil water content. A run also exports a CSV time series, an NPZ archive of node states and fluxes, JSON diagnostics and parameters, and PDF/SVG figures. Use a new output directory for each experiment; repeated runs to the same directory replace files with the same names.
+
+\newpage
+\subsection{Run from a Python script or notebook}
+
+\begin{lstlisting}[language=Python,caption={Minimal Python API example.}]
+from hsbsm import load_config, run
+
+cfg = load_config("examples/synthetic/config.json")
+cfg.params["Aq"]["k"] = 1e-3  # m/s
+result = run(cfg)
+result.save("outputs/my_run")
+print(result.timeseries[["date", "Q_total_m3s"]].head())
+print(result.diagnostics["relative_water_balance_error"])
+\end{lstlisting}
+
+The notebook \path{examples/quickstart.ipynb} demonstrates the same API. Install the optional notebook dependencies with \texttt{python -m pip install -e ".[notebook]"} and start \texttt{jupyter lab}. The model itself does not require Jupyter, MATLAB, or a LaTeX installation.
+
+\subsection{Wet Beaver Creek and observed discharge}
+
+The field example includes daily forcing from 1 January 2005 to 30 September 2023, a 44-cell hillslope grid, a channel travel-distance distribution, and observed discharge. Run the first year before attempting the full record.
+
+\begin{lstlisting}[language={},caption={One year with observation-based evaluation.}]
+python -m hsbsm run examples/wet_beaver_creek/config.json --steps 365 --output outputs/wbc-year --observations examples/wet_beaver_creek/observations.csv --warmup 30
+\end{lstlisting}
+
+Omit \texttt{--steps 365} to simulate the full record. The warmup option excludes the first 30 steps from performance metrics; it does not remove them from the simulation or water balance. Default field parameters have not been recalibrated for this Python version. The field configuration preserves the active MATLAB driver's disabled interception and zero deep-recharge fraction. Both switches can be changed explicitly in the JSON configuration.
+
+The supplied observed-flow series ends on 1 January 2018 and contains 4,749 daily values within the forcing period. Dates after that endpoint are simulated but excluded from observed-flow metrics. For calibration over the full observed window, use \texttt{--steps 4749} so that both calibration and validation retain observations.
+
+The example retains the raw meteorological table and records 11 prepared values in \path{forcing_corrections.csv}: eight missing LAI values, one missing vegetation fraction, one zero vegetation fraction inconsistent with positive LAI, and one invalid albedo. The prepared example interpolates these values between adjacent valid daily records. The runtime reader performs no implicit gap filling. Precipitation and observed discharge are unchanged. Snow-cover fraction reduces potential bare-soil evaporation only; no snow accumulation or melt store is implemented.
+
+\subsection{Adapt the example to another catchment}
+
+Copy an example directory and edit its four inputs: the JSON configuration, hillslope geometry CSV, channel CSV, and meteorological forcing CSV. Paths inside the configuration are relative to that file, so the experiment can be moved between computers. Geometry uses cell centers \texttt{x\_m}, widths \texttt{w\_m}, and lengths \texttt{dx\_m}. Channel inputs use distance to outlet and nonnegative bin weights. For nonuniform channel bins, provide integrated probability masses.
+
+Meteorological fields, units, initial states, and parameter overrides are listed in Section~\ref{sec:python_reference}. The model rejects missing forcing, inconsistent time intervals, and unknown parameter names. Use prepared geometry tables; delineation and network extraction from a DEM remain in the original MATLAB/TopoToolbox preprocessing workflow.
+
+\subsection{Calibration and sensitivity}
+
+\begin{lstlisting}[language={},caption={Example bounded calibration.}]
+python -m hsbsm calibrate examples/wet_beaver_creek/config.json --steps 365 --observations examples/wet_beaver_creek/observations.csv --active Aq_k Aq_f --warmup 30 --maxiter 10 --popsize 5 --seed 42 --output outputs/calibration
+\end{lstlisting}
+
+Calibration minimizes $1-\mathrm{KGE}$ (2009) with SciPy differential evolution. The first 80\% of the selected simulation period is used for calibration and the remaining 20\% for validation. Conductivities are searched in logarithmic space. The report records the seed, bounds, failed trials, stopping message, and metrics for both windows. Reaching the iteration budget does not demonstrate convergence. This optimizer is different from MATLAB's genetic algorithm, so identical fitted parameters are not expected.
+
+One-at-a-time sensitivity is available through \texttt{python -m hsbsm sensitivity}; select parameters with \texttt{--active}. Forward runs with observations export NSE, KGE, RMSE, PBIAS, annual metrics, and an aligned comparison table. Missing observations remain missing and are excluded from metrics.
+
+\newpage

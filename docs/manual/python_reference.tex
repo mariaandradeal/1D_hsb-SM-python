@@ -1,0 +1,56 @@
+\section{Python Interfaces, Numerical Checks, and Reproducibility}
+\label{sec:python_reference}
+
+\subsection{Configuration and array conventions}
+
+\texttt{load\_config(path)} returns a \texttt{Config} object containing \texttt{grid}, \texttt{forcing}, \texttt{dt}, \texttt{channel}, \texttt{params}, \texttt{initial}, and \texttt{metadata}. Geometry arrays contain one value per cell. Node outputs have shape $(N_t,N_x)$, with time on the first axis. A timestamp marks the beginning of a forcing interval; the reported storage at that row is the state after advancing that interval. Discharge and flux entries are interval-mean rates.
+
+The input forcing is spatially uniform. It contains \texttt{date}, precipitation \texttt{P} [m\,s$^{-1}$], \texttt{Temp\_C} [$^\circ$C], \texttt{Pres\_kPa}, \texttt{VapP\_kPa} [kPa], \texttt{Wind\_ms} [m\,s$^{-1}$], \texttt{SRad\_Wm2}, \texttt{LRad\_Wm2} [W\,m$^{-2}$], albedo \texttt{Albd}, \texttt{LAI}, and vegetated fraction \texttt{fv}. The latter three are dimensionless. Optional snow-cover fraction \texttt{SFC} lies in $[0,1]$. The reader accepts the original spreadsheet column aliases and converts precipitation in mm/day to m/s. Ground-area LAI is divided by vegetated fraction once when requested by \texttt{lai\_basis}. Missing and inconsistent inputs produce an error.
+
+Parameters retain the groups \texttt{Hill}, \texttt{Met}, \texttt{Veg}, \texttt{Soil.RZ}, \texttt{Soil.TZ}, \texttt{Infil}, \texttt{Aq}, \texttt{Deep}, \texttt{Route}, and \texttt{Num}. Only the supplied overrides replace defaults. Scalar or node-vector initial states are accepted for root-zone and transmission-zone water content, canopy depth, aquifer head, deep storage depth, and cumulative infiltration. Initial aquifer and canopy storage are zero by default. Initial deep storage is 1 mm.
+
+{\small
+\begin{longtable}{p{0.27\linewidth}p{0.31\linewidth}p{0.33\linewidth}}
+\toprule
+Operation & MATLAB source & Python entry point \\
+\midrule
+\endhead
+Parameters/configuration & \texttt{hsbsm\_params}, \texttt{hsbsm\_config} & \texttt{default\_parameters}, \texttt{load\_config} \\
+PM and canopy & \texttt{hsbsm\_pm}, \texttt{hsbsm\_canopy\_pm} & \texttt{physics.penman\_monteith}, \texttt{physics.canopy\_step} \\
+Infiltration & \texttt{hsbsm\_infil\_milly} & \texttt{physics.infiltration\_step} \\
+Soil exchange & \texttt{hsbsm\_rz\_tz\_coupled} & \texttt{physics.soil\_step} \\
+Lateral aquifer & \texttt{hsB\_solver} & \texttt{aquifer.advance} \\
+Simulation & \texttt{hsbsm\_run} & \texttt{run(config)} \\
+Outputs & MATLAB structs and MAT files & \texttt{Result.timeseries}, \texttt{nodes}, \texttt{diagnostics}, \texttt{save} \\
+Calibration/evaluation & MATLAB calibration scripts & \texttt{calibration.calibrate}, \texttt{evaluation.evaluate} \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{Aquifer and routing numerics}
+
+The Python solver retains the face fluxes in \texttt{hsB\_solver.m}: harmonic storage, a numerical film, and drift stabilization. Defaults are $\theta=1$, relaxation $\omega=0.8$, Picard tolerance $10^{-9}$ in storage units, and a maximum internal timestep of 3600 s. Each accepted substep passes convergence and volume checks. Failed substeps are retried at smaller timesteps; persistent failure raises an error.
+
+Infiltration, ET, and vertical exchange use the forcing timestep. A small aquifer substep alone does not establish convergence of the coupled soil update. Users should repeat important experiments at finer forcing resolution and assess timestep sensitivity. The implementation checks conservation and bounds but does not establish a universal spatial or temporal error bound.
+
+Routing uses the same advection--diffusion travel-time density as Eq.~\eqref{eq:qcx}. Python integrates that density over time bins and applies a causal convolution with dimensionless weights whose sum is one. Water still in the routing queue at the final timestamp is reported as channel storage. Optional baseflow and deep-flow routing use the same kernel and remain identifiable as separate outlet components.
+
+\subsection{Whole-model water balance}
+
+Let $V_0$ and $V_1$ be the total initial and final land-store volumes [m$^3$], including canopy, RZ, TZ, hsB aquifer, and the deep reservoir. Let $V_P$, $V_E$, and $V_Q$ be integrated precipitation, evapotranspiration, and outlet discharge volumes. With an initially empty channel queue and final channel storage $V_C$, the residual is
+\begin{equation}
+\varepsilon_V=V_P-V_E-V_Q-(V_1-V_0)-V_C.
+\end{equation}
+The relative error is $|\varepsilon_V|/\max(V_P+V_0,10^{-30})$. Both quantities are exported in \path{diagnostics.json}. Aquifer saturation overflow enters surface routing once. It is not added again to the total discharge. Store limits transfer excess water explicitly and share finite donor water between competing fluxes.
+
+\subsection{Reference comparisons and their limits}
+
+The reference MATLAB commit is \texttt{8e915a9d1669b37ff9c4a65fd740bcc1d67f551b}. Unmodified PM, canopy, infiltration, coupled-soil, and aquifer functions were executed in GNU Octave 11.3.0 to generate the bundled reference fixture. The Python tests compare PM potentials and canopy storage, infiltration and dry-step reset, an unconstrained soil-exchange case, and ten aquifer steps on a nonuniform grid. The relative comparison tolerances are $10^{-11}$ to $10^{-12}$, with small absolute tolerances for near-zero values.
+
+Additional tests cover dry and saturated states, overflow, capillary extraction, channel-tail conservation, selected-component routing, initial-state validation, input units and dates, performance metrics, and separation of calibration and validation data. Install the development extra and run \texttt{python -m pytest -q}. The MATLAB/Octave runtime is needed only to regenerate the reference fixture, using \path{tools/export_matlab_reference.m}.
+
+The full legacy pipeline has not been executed under MATLAB for this port. Component agreement does not imply identical full-model hydrographs or demonstrated field predictive skill. The Python implementation intentionally corrects shared-water limits, aquifer storage-to-depth conversion, overflow double counting, and routing-tail accounting. The migration report identifies these differences. Wet Beaver Creek requires a new calibration and independent validation before interpretation as a site-specific predictive model.
+
+\subsection{Build and maintain this manual}
+
+The LaTeX source, bibliography, and figures are stored in \path{docs/manual}. From the repository root, run \texttt{python tools/build\_manual.py} with a TeX distribution installed. The script runs pdfLaTeX and BibTeX directly and does not require Perl. The Python model can be installed without a TeX distribution. The original conceptual and process sequence is retained, while the duplicated root-zone sections and obsolete quick-start function names have been replaced with the active coupled formulation and runnable Python commands.
