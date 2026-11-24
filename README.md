@@ -9,7 +9,7 @@ This repository extends the [MATLAB implementation](https://github.com/marcusnob
 Install Python 3.11 or newer and Git. The commands below run a five-day synthetic storm example with all five stores enabled.
 
 ```sh
-git clone https://github.com/marcusnobrega-eng/1D_hsb-SM-python.git
+git clone https://github.com/mariaandradeal/1D_hsb-SM-python.git
 cd 1D_hsb-SM-python
 python -m venv .venv
 ```

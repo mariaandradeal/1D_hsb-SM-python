@@ -22,7 +22,7 @@ notebook = ["jupyterlab>=4"]
 hsbsm = "hsbsm.cli:main"
 
 [project.urls]
-Source = "https://github.com/marcusnobrega-eng/1D_hsb-SM-python"
+Source = "https://github.com/mariaandradeal/1D_hsb-SM-python"
 "MATLAB reference" = "https://github.com/marcusnobrega-eng/1D_hsb-SM"
 
 [tool.setuptools.packages.find]
