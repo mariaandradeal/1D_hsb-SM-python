@@ -1,5 +1,6 @@
 include LICENSE CITATION.cff requirements-tested.txt
 recursive-include examples *.json *.csv *.md *.ipynb
+recursive-include templates *.json *.csv *.md
 recursive-include docs *.md *.tex *.bib *.pdf
 recursive-include tools *.py *.m
 recursive-include tests *.py *.mat

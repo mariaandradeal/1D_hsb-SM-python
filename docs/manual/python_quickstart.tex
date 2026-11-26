@@ -1,79 +1,117 @@
-\section{Quick Start: Running hsB--SM in Python}
+\section{Quick Start: Configuring Your First Model}
 \label{sec:python_quickstart}
 
-This manual extends the original MATLAB formulation with a standalone Python implementation. The Python repository is \url{https://github.com/mariaandradeal/1D_hsb-SM-python}. The original MATLAB code remains at \url{https://github.com/marcusnobrega-eng/1D_hsb-SM}. Python version 0.1.0 follows the active coupled model and corrects specific water-accounting errors, as detailed in Section~\ref{sec:python_reference}. Full-model hydrographs can therefore differ between implementations.
+This section describes how to install hsB--SM, prepare catchment inputs, set the parameters and initial conditions, and run the model. A forward simulation requires hillslope geometry, a channel travel-distance distribution, and meteorological time series. Observed discharge is optional for simulation and is needed for evaluation or calibration. The equations and implementation details follow in the later sections.
 
-\subsection{Install and run the bundled example}
+\subsection{Install the model}
 
-Install Python 3.11 or newer and Git. Open a terminal in a directory where you want to keep the model, then download the repository and create an isolated environment.
+Install Python 3.11 or newer and Git. Open a terminal and download the Python repository.
 
-\begin{lstlisting}[language={},caption={Download the Python repository.}]
+\begin{lstlisting}[language={},caption={Download the repository.}]
 git clone https://github.com/mariaandradeal/1D_hsb-SM-python.git
 cd 1D_hsb-SM-python
+\end{lstlisting}
+
+On Windows PowerShell, create and activate a Python environment, then install the package.
+
+\begin{lstlisting}[language={},caption={Install on Windows.}]
 python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
 \end{lstlisting}
 
-On Windows PowerShell, the following commands use the environment directly. Activation is optional and no change to the system execution policy is required.
+If PowerShell blocks activation, use \path{.\.venv\Scripts\python.exe} in place of \texttt{python} in the installation and model commands. Activation is optional.
 
-\begin{lstlisting}[language={},caption={Install and run on Windows.}]
-.\.venv\Scripts\python.exe -m pip install -e .
-.\.venv\Scripts\python.exe -m hsbsm run examples/synthetic/config.json --output outputs/quickstart
-\end{lstlisting}
+On macOS or Linux, use the following commands.
 
-On macOS or Linux, activate the environment and run the same model command.
-
-\begin{lstlisting}[language={},caption={Install and run on macOS or Linux.}]
+\begin{lstlisting}[language={},caption={Install on macOS or Linux.}]
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
-python -m hsbsm run examples/synthetic/config.json --output outputs/quickstart
 \end{lstlisting}
 
-The synthetic example contains 120 hourly intervals and two prescribed storms. It enables canopy interception and a deep-recharge fraction of 0.2. The terminal reports simulation progress and the relative water-balance error. Open \path{outputs/quickstart/hydrograph.png} to inspect rainfall, actual evapotranspiration, discharge components, and soil water content. A run also exports a CSV time series, an NPZ archive of node states and fluxes, JSON diagnostics and parameters, and PDF/SVG figures. Use a new output directory for each experiment; repeated runs to the same directory replace files with the same names.
+\subsection{Prepare the input files}
 
-\newpage
-\subsection{Run from a Python script or notebook}
+From the repository root, copy \path{templates/catchment} to a new model directory. The copy command requires a new destination and does not overwrite an existing model. The CSV templates contain column headers only. Fill them with data for your catchment.
 
-\begin{lstlisting}[language=Python,caption={Minimal Python API example.}]
+\begin{lstlisting}[language={},basicstyle=\ttfamily\footnotesize,caption={Create a model directory from the input template.}]
+python -c "from shutil import copytree; copytree('templates/catchment', 'my_model')"
+\end{lstlisting}
+
+The model directory contains four input files. \path{geometry.csv} defines the hillslope cells, \path{channel.csv} defines the channel travel-distance distribution, \path{forcing.csv} contains meteorological and vegetation inputs, and \path{config.json} stores paths, the timestep, slopes, parameters, and initial conditions. Paths inside the configuration are relative to its directory.
+
+In \path{geometry.csv}, supply cell-center distance \texttt{x\_m}, planform width \texttt{w\_m}, and cell length \texttt{dx\_m}, all in metres. Order cells from the outlet toward the divide. Distances, widths, and lengths must be positive. Each center must lie inside the cell edges obtained by accumulating cell lengths from the outlet. Supply prepared geometry tables; the Python package does not delineate a catchment from a digital elevation model.
+
+In \path{channel.csv}, supply increasing positive channel distances \texttt{distance\_m} [m] and nonnegative bin weights \texttt{weight}. Their sum must be positive. The model normalizes the weights. For unequal distance-bin widths, use integrated probability masses.
+
+The meteorological table has one row per forcing interval and the columns listed below. The forcing is spatially uniform across the hillslope.
+
+{\small
+\begin{longtable}{p{0.27\linewidth}p{0.62\linewidth}}
+\toprule
+Column & Meaning and unit \\
+\midrule
+\endhead
+\texttt{date} & Start of the interval, as \texttt{YYYY-MM-DD} or \texttt{YYYY-MM-DD HH:MM:SS} \\
+\texttt{P} & Precipitation rate [m\,s$^{-1}$] \\
+\texttt{Temp\_C} & Air temperature [$^\circ$C] \\
+\texttt{Pres\_kPa}, \texttt{VapP\_kPa} & Air pressure and actual vapor pressure [kPa] \\
+\texttt{Wind\_ms} & Wind speed [m\,s$^{-1}$] \\
+\texttt{SRad\_Wm2}, \texttt{LRad\_Wm2} & Incoming shortwave and longwave radiation [W\,m$^{-2}$] \\
+\texttt{Albd} & Surface albedo, from 0 to 1 \\
+\texttt{LAI} & Leaf area index [m$^2$\,m$^{-2}$] \\
+\texttt{fv} & Vegetated area fraction, from 0 to 1 \\
+\texttt{SFC} & Optional snow-cover fraction, from 0 to 1; zero if the column is absent \\
+\bottomrule
+\end{longtable}
+}
+
+Use one consistent time basis. Dates must be unique, increasing, and equally spaced. Required values must be finite. If precipitation is in mm/day, name its column \texttt{Prec\_mm\_day} instead of \texttt{P}; the reader converts it to m/s. Missing values are not filled automatically. To read an Excel forcing table, install \texttt{python -m pip install -e ".[excel]"} and change the forcing filename in the configuration.
+
+\subsection{Set the configuration and initial conditions}
+
+Open \path{my_model/config.json}. Replace the three required \texttt{null} values with numbers: \texttt{dt} is the forcing interval in seconds, \texttt{channel.slope} is the positive channel slope in m/m, and \texttt{parameters.Hill.iota\_rad} is the hillslope angle in radians. The timestep must equal the interval between forcing timestamps.
+
+Set \texttt{forcing.lai\_basis} to \texttt{ground} when LAI is defined per unit ground area, or \texttt{vegetated} when it is defined per unit vegetated area. The reader divides ground-area LAI by \texttt{fv} once. Ground-area LAI must be zero wherever \texttt{fv} is zero.
+
+The remaining values in the template are implementation defaults. Review them for the catchment before running. Set layer depths and hydraulic properties in \texttt{Soil.RZ} (root zone) and \texttt{Soil.TZ} (transmission zone), aquifer conductivity, drainable porosity, and thickness in \texttt{Aq}, and channel velocity and routing parameters in \texttt{Route}. Conductivities are in m\,s$^{-1}$, depths in m, and soil water contents in m$^3$\,m$^{-3}$. Van Genuchten \texttt{alpha} is in m$^{-1}$ and \texttt{n} is dimensionless. These defaults are not calibrated catchment estimates.
+
+Choose \texttt{Flags.interception} explicitly. \texttt{Deep.phi\_d} controls the fraction of downward recharge entering the deep reservoir. Review each soil layer's initial water content, \texttt{theta0}. The optional \texttt{initial} object accepts scalar or node-vector values for \texttt{theta\_rz}, \texttt{theta\_tz}, \texttt{canopy\_m}, \texttt{aquifer\_head\_m}, \texttt{deep\_m}, and \texttt{infiltration\_m}. Soil water contents are in m$^3$\,m$^{-3}$; the other initial states are in m. Without overrides, soil water contents use \texttt{theta0}, canopy and aquifer storage start at zero, deep storage starts at 1 mm, and cumulative infiltration starts at zero. A nonzero initial canopy store requires interception to be enabled.
+
+Five optional parameters may remain \texttt{null}. \texttt{Veg.d}, \texttt{Veg.z0m}, and \texttt{Veg.z0h} then use the canopy-height relations. \texttt{Infil.K\_mps} and \texttt{Infil.S\_mps05} then use the soil-based infiltration expressions. Record data and parameter sources in \texttt{metadata} and retain an unchanged copy of the source data.
+
+\subsection{Check the inputs and run}
+
+After filling the tables and configuration, check that the model can load them. Resolve any reported input errors before running.
+
+\begin{lstlisting}[language={},basicstyle=\ttfamily\footnotesize,caption={Load and check the configured inputs.}]
+python -c "from hsbsm import load_config; load_config('my_model/config.json')"
+\end{lstlisting}
+
+Run the model from the repository root.
+
+\begin{lstlisting}[language={},caption={Run with the prepared catchment inputs.}]
+python -m hsbsm run my_model/config.json --output outputs/my_model
+\end{lstlisting}
+
+Use a new output directory for each experiment. Saving to an existing directory replaces files with the same names. The option \texttt{--no-plots} skips figure generation.
+
+The same configuration can be used from a Python script.
+
+\begin{lstlisting}[language=Python,caption={Run through the Python interface.}]
 from hsbsm import load_config, run
 
-cfg = load_config("examples/synthetic/config.json")
-cfg.params["Aq"]["k"] = 1e-3  # m/s
+cfg = load_config("my_model/config.json")
 result = run(cfg)
-result.save("outputs/my_run")
-print(result.timeseries[["date", "Q_total_m3s"]].head())
-print(result.diagnostics["relative_water_balance_error"])
+result.save("outputs/my_model")
 \end{lstlisting}
 
-The notebook \path{examples/quickstart.ipynb} demonstrates the same API. Install the optional notebook dependencies with \texttt{python -m pip install -e ".[notebook]"} and start \texttt{jupyter lab}. The model itself does not require Jupyter, MATLAB, or a LaTeX installation.
+The notebook \path{examples/quickstart.ipynb} reads the prepared configuration and follows this workflow. It requires the user's input files. Install notebook support with \texttt{python -m pip install -e ".[notebook]"}, then start \texttt{jupyter lab}.
 
-\subsection{Wet Beaver Creek and observed discharge}
+\subsection{Inspect the first run}
 
-The field example includes daily forcing from 1 January 2005 to 30 September 2023, a 44-cell hillslope grid, a channel travel-distance distribution, and observed discharge. Run the first year before attempting the full record.
+Read \path{outputs/my_model/diagnostics.json} for the water-balance residual and solver diagnostics. Inspect \path{timeseries.csv} and \path{hydrograph.png} for discharge, evapotranspiration, and soil water content. Confirm that the dates, units, and magnitudes agree with the supplied inputs. A closed water balance checks numerical accounting; evaluation of predictive performance requires observed data.
 
-\begin{lstlisting}[language={},caption={One year with observation-based evaluation.}]
-python -m hsbsm run examples/wet_beaver_creek/config.json --steps 365 --output outputs/wbc-year --observations examples/wet_beaver_creek/observations.csv --warmup 30
-\end{lstlisting}
-
-Omit \texttt{--steps 365} to simulate the full record. The warmup option excludes the first 30 steps from performance metrics; it does not remove them from the simulation or water balance. Default field parameters have not been recalibrated for this Python version. The field configuration preserves the active MATLAB driver's disabled interception and zero deep-recharge fraction. Both switches can be changed explicitly in the JSON configuration.
-
-The supplied observed-flow series ends on 1 January 2018 and contains 4,749 daily values within the forcing period. Dates after that endpoint are simulated but excluded from observed-flow metrics. For calibration over the full observed window, use \texttt{--steps 4749} so that both calibration and validation retain observations.
-
-The example retains the raw meteorological table and records 11 prepared values in \path{forcing_corrections.csv}: eight missing LAI values, one missing vegetation fraction, one zero vegetation fraction inconsistent with positive LAI, and one invalid albedo. The prepared example interpolates these values between adjacent valid daily records. The runtime reader performs no implicit gap filling. Precipitation and observed discharge are unchanged. Snow-cover fraction reduces potential bare-soil evaporation only; no snow accumulation or melt store is implemented.
-
-\subsection{Adapt the example to another catchment}
-
-Copy an example directory and edit its four inputs: the JSON configuration, hillslope geometry CSV, channel CSV, and meteorological forcing CSV. Paths inside the configuration are relative to that file, so the experiment can be moved between computers. Geometry uses cell centers \texttt{x\_m}, widths \texttt{w\_m}, and lengths \texttt{dx\_m}. Channel inputs use distance to outlet and nonnegative bin weights. For nonuniform channel bins, provide integrated probability masses.
-
-Meteorological fields, units, initial states, and parameter overrides are listed in Section~\ref{sec:python_reference}. The model rejects missing forcing, inconsistent time intervals, and unknown parameter names. Use prepared geometry tables; delineation and network extraction from a DEM remain in the original MATLAB/TopoToolbox preprocessing workflow.
-
-\subsection{Calibration and sensitivity}
-
-\begin{lstlisting}[language={},caption={Example bounded calibration.}]
-python -m hsbsm calibrate examples/wet_beaver_creek/config.json --steps 365 --observations examples/wet_beaver_creek/observations.csv --active Aq_k Aq_f --warmup 30 --maxiter 10 --popsize 5 --seed 42 --output outputs/calibration
-\end{lstlisting}
-
-Calibration minimizes $1-\mathrm{KGE}$ (2009) with SciPy differential evolution. The first 80\% of the selected simulation period is used for calibration and the remaining 20\% for validation. Conductivities are searched in logarithmic space. The report records the seed, bounds, failed trials, stopping message, and metrics for both windows. Reaching the iteration budget does not demonstrate convergence. This optimizer is different from MATLAB's genetic algorithm, so identical fitted parameters are not expected.
-
-One-at-a-time sensitivity is available through \texttt{python -m hsbsm sensitivity}; select parameters with \texttt{--active}. Forward runs with observations export NSE, KGE, RMSE, PBIAS, annual metrics, and an aligned comparison table. Missing observations remain missing and are excluded from metrics.
+The run also exports node states and fluxes, the parameter values, monthly mean rates, annual water totals, and figures in PNG, PDF, and SVG formats. Section~\ref{sec:python_reference} defines the output conventions and numerical checks.
 
 \newpage

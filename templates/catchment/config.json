@@ -1,0 +1,100 @@
+{
+  "geometry": "geometry.csv",
+  "channel": {
+    "file": "channel.csv",
+    "slope": null
+  },
+  "forcing": {
+    "file": "forcing.csv",
+    "lai_basis": "vegetated"
+  },
+  "dt": null,
+  "parameters": {
+    "Hill": {
+      "iota_rad": null
+    },
+    "Met": {
+      "zref_m": 10.0
+    },
+    "Veg": {
+      "cw_per_LAI": 0.0012,
+      "rc_min": 100.0,
+      "h_c": 20.0,
+      "d": null,
+      "z0m": null,
+      "z0h": null,
+      "free_throughfall_f0": 0.0
+    },
+    "Soil": {
+      "RZ": {
+        "z": 0.65,
+        "theta_min": 0.045,
+        "theta_sat": 0.38,
+        "theta0": 0.3,
+        "vG": {
+          "alpha": 6.0,
+          "n": 2.2,
+          "Ks": 2e-06
+        }
+      },
+      "TZ": {
+        "z": 0.35,
+        "theta_min": 0.045,
+        "theta_sat": 0.38,
+        "theta0": 0.3,
+        "vG": {
+          "alpha": 6.0,
+          "n": 2.2,
+          "Ks": 2e-06
+        },
+        "cap_frac_of_K": 0.3
+      },
+      "rs_soil": 157.7
+    },
+    "Infil": {
+      "model": "Milly",
+      "K_mps": null,
+      "S_mps05": null,
+      "F0_m": 0.001,
+      "Fmin_m": 0.01,
+      "resetDrySteps": 3,
+      "max_c": 0.7
+    },
+    "Aq": {
+      "k": 0.001468,
+      "f": 0.09,
+      "D": 0.35
+    },
+    "Deep": {
+      "phi_d": 0.0,
+      "k_out_s": 1.3888944444666667e-07
+    },
+    "Route": {
+      "enabled": true,
+      "F": 0.8,
+      "V": 1.0,
+      "a0": 0.6666666666666666,
+      "route_baseflow": false,
+      "route_deepflow": false,
+      "overflow_fill_hierarchy": false
+    },
+    "Num": {
+      "theta": 1.0,
+      "omega": 0.8,
+      "picard_max": 60,
+      "picard_tol": 1e-09,
+      "dt_max": 3600.0,
+      "dt_min": 0.001,
+      "cfl": 0.3
+    },
+    "Flags": {
+      "interception": false
+    }
+  },
+  "initial": {},
+  "metadata": {
+    "site": "",
+    "data_sources": "",
+    "parameter_sources": ""
+  }
+}

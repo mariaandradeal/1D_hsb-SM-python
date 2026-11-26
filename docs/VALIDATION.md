@@ -1,6 +1,7 @@
 # Recorded validation
 
-Executed locally on 24 November 2026, using Windows and Python 3.12.
+Numerical checks were executed locally on 24 November 2026, using Windows and
+Python 3.12. The revised setup workflow was checked on 25 November 2026.
 The numerical dependency versions are recorded in `requirements-tested.txt`.
 The MATLAB baseline is commit `8e915a9d1669b37ff9c4a65fd740bcc1d67f551b`.
 
@@ -12,9 +13,17 @@ independent conservation checks, ADE-kernel integration against numerical
 quadrature, input validation, and calibration/validation separation.
 The complete original MATLAB pipeline was not executed.
 
-The Quick Start notebook was validated as nbformat 4 and all four code cells
-were executed in a fresh Python kernel from the `examples` directory. This
-covered loading, simulation, plotting/export, and a parameter comparison.
+The revised Quick Start notebook was validated as nbformat 4. All four code
+cells were executed in fresh Python kernels with both an unconfigured template
+and completed catchment inputs. The unconfigured template produced no
+simulation or output files. For the completed-input check, seven days of the
+existing Wet Beaver Creek forcing and its 44-cell geometry were copied to an
+isolated temporary directory. The documented command-line workflow and the
+notebook produced matching discharge, with a relative tolerance of 1e-12. The
+relative water-balance error was 3.7906e-14. These data were used only to check
+the setup workflow; the distributed input tables contain headers only.
+The template copy command was also checked to reject an existing destination
+without changing its configuration.
 
 ## Forward simulations
 
@@ -58,8 +67,9 @@ The sensitivity command completed a baseline and ±10% perturbations of
 
 ## Documentation and distribution
 
-The 32-page manual was compiled with pdfLaTeX and BibTeX and inspected as
-rendered pages. No unresolved references, duplicate labels, or overfull boxes
+The revised 33-page manual was compiled with pdfLaTeX and BibTeX. The changed
+pages were inspected after rendering; the remaining pages had been inspected
+on 24 November. No unresolved references, duplicate labels, or overfull boxes
 remain. Model plots were inspected in PNG and also exported as PDF/SVG.
 
 The source distribution and wheel were built locally. GitHub Actions checks
