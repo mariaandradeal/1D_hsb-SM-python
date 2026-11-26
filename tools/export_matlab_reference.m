@@ -19,6 +19,11 @@ P = struct('Soil',Soil,'Infil',struct('model','Milly','K_mps',2e-6, ...
 [inf,rex,~,si] = hsbsm_infil_milly([1e-5;1e-7;0], ...
     struct('Fi_m',[0;0.02;0.1],'dryCount',[0;0;3]),P,3600,[0.2;0.3;0.38]);
 infiltration = [inf,rex,si.Fi_m,si.dryCount,si.last_InfCap];
+P.Infil.model = 'Troch';
+P.Troch.alpha_inv_m = 1/3;
+[inf,rex,~,si] = hsbsm_infil_milly([1e-5;1e-7;0], ...
+    struct('Fi_m',[0;0.02;0.1],'dryCount',[0;0;3]),P,3600,[0.2;0.3;0.38]);
+troch_override = [inf,rex,si.Fi_m,si.dryCount,si.last_InfCap];
 % Zero aquifer storage keeps the source unit bug inactive in this parity case.
 [sr,st,fl] = hsbsm_rz_tz_coupled([1e-7;2e-7],1e-8,2e-9, ...
     struct('theta',[0.30;0.32]),struct('theta',[0.29;0.31]),Soil,60, ...
@@ -29,6 +34,6 @@ ap = struct('k',1e-4,'f',0.2,'iota',0.1,'D',1,'S0',0.2*w.*[0.1;0.2;0.15;0.1]);
 opts = struct('theta',1,'omega',0.8,'picard_max',60,'picard_tol',1e-11, ...
     'verbose',false,'mass_check',true,'plot_live',false,'safeguard',true);
 [aq_q,aq_over,~,aq_h,aq_s,aq_diag] = hsB_solver(x,w,ones(10,1)*1e-7,60,10,ap,opts,false);
-save(output_file,'pm','canopy','infiltration','soil','aq_q','aq_over','aq_h','aq_s','-v7');
+save(output_file,'pm','canopy','infiltration','troch_override','soil','aq_q','aq_over','aq_h','aq_s','-v7');
 fprintf('Wrote reference fixture: %s\n',output_file);
 end

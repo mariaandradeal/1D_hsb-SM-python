@@ -93,7 +93,7 @@ The template lists the implementation defaults for the other parameters. Review 
 
 Choose `Flags.interception` explicitly. `Deep.phi_d` controls the fraction of downward recharge entering the deep reservoir. Review the initial soil water contents (`theta0` in each soil layer). The optional `initial` object overrides the starting stores; accepted fields and defaults are listed under [Inputs and parameters](#inputs-and-parameters).
 
-Five optional parameter values may remain `null`: `Veg.d`, `Veg.z0m`, and `Veg.z0h` use the canopy-height relations, while `Infil.K_mps` and `Infil.S_mps05` use the soil-based infiltration expressions.
+Six optional parameter values may remain `null`: `Veg.d`, `Veg.z0m`, and `Veg.z0h` use the canopy-height relations, while `Infil.K_mps` and `Infil.S_mps05` use the soil-based infiltration expressions. `Troch.alpha_inv_m` defaults to the inverse of the root-zone van Genuchten alpha; a positive override is a length in metres and affects Troch mode only.
 
 ### 4. Check the inputs and run
 
@@ -203,3 +203,5 @@ DEM delineation and historical exploratory MATLAB scripts are outside this first
 Gomes Júnior, M. N. *hsB–SM: coupled hillslope-storage Boussinesq and soil-moisture model, Python implementation*, version 0.1.0 (2026). Cite the repository and the exact commit or release used in an analysis. The original MATLAB source is pinned in `docs/MIGRATION.md`; no DOI has been assigned here.
 
 Code and documentation are distributed under the [MIT License](LICENSE). Example data retain their source attribution; see the data provenance notes.
+
+The [MATLAB/Python/manual comparison](docs/MATLAB_COMPATIBILITY.md) records the active equations, corrected documentation, supported options, and intentional numerical differences.

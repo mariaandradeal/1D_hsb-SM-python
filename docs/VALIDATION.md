@@ -1,17 +1,20 @@
 # Recorded validation
 
 Numerical checks were executed locally on 24 November 2026, using Windows and
-Python 3.12. The revised setup workflow was checked on 25 November 2026.
+Python 3.12. The setup workflow and MATLAB/manual alignment were checked on 25 November 2026.
 The numerical dependency versions are recorded in `requirements-tested.txt`.
 The MATLAB baseline is commit `8e915a9d1669b37ff9c4a65fd740bcc1d67f551b`.
 
 ## Automated checks
 
-`python -m pytest -q`: **30 passed**. The suite includes component comparisons
+`python -m pytest -q`: **35 passed**. The suite includes component comparisons
 against the unmodified MATLAB functions executed in GNU Octave 11.3.0,
 independent conservation checks, ADE-kernel integration against numerical
 quadrature, input validation, and calibration/validation separation.
-The complete original MATLAB pipeline was not executed.
+The complete original MATLAB pipeline was not executed. The 25 November
+revision adds a MATLAB/Octave fixture for the Troch capillary-length override
+and checks that it affects Troch mode only. Four invalid-override cases are
+also rejected. The manual now gives the active process equations and options.
 
 The revised Quick Start notebook was validated as nbformat 4. All four code
 cells were executed in fresh Python kernels with both an unconfigured template
@@ -67,7 +70,7 @@ The sensitivity command completed a baseline and ±10% perturbations of
 
 ## Documentation and distribution
 
-The revised 33-page manual was compiled with pdfLaTeX and BibTeX. The changed
+The revised 30-page manual was compiled with pdfLaTeX and BibTeX. The changed
 pages were inspected after rendering; the remaining pages had been inspected
 on 24 November. No unresolved references, duplicate labels, or overfull boxes
 remain. Model plots were inspected in PNG and also exported as PDF/SVG.

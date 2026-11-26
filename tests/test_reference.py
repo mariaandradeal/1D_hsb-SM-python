@@ -27,6 +27,20 @@ def test_infiltration_matches_matlab():
     assert_allclose(np.column_stack((inf, rex, cum, dry, capacity)), GOLD["infiltration"], atol=1e-14, rtol=1e-12)
 
 
+def test_troch_capillary_length_matches_matlab():
+    p = default_parameters()
+    p["Infil"]["model"] = "Troch"
+    p["Troch"]["alpha_inv_m"] = 1/3
+    actual = infiltration_step(np.array([1e-5, 1e-7, 0]),
+        np.array([0, 0.02, 0.1]), np.array([0, 0, 3]), np.array([0.2, 0.3, 0.38]), p, 3600)
+    assert_allclose(np.column_stack(actual), GOLD["troch_override"], atol=1e-14, rtol=1e-12)
+    # MATLAB applies this override only in Troch mode.
+    p["Infil"]["model"] = "Milly"
+    actual = infiltration_step(np.array([1e-5, 1e-7, 0]),
+        np.array([0, 0.02, 0.1]), np.array([0, 0, 3]), np.array([0.2, 0.3, 0.38]), p, 3600)
+    assert_allclose(np.column_stack(actual), GOLD["infiltration"], atol=1e-14, rtol=1e-12)
+
+
 def test_unconstrained_soil_exchange_matches_matlab():
     p = default_parameters()
     s = soil_step(np.array([1e-7, 2e-7]), 1e-8, 2e-9, np.array([0.30, 0.32]),

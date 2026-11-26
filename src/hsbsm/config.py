@@ -25,6 +25,7 @@ def default_parameters() -> dict:
         },
         "Infil": {"model": "Milly", "K_mps": None, "S_mps05": None, "F0_m": 0.001,
                   "Fmin_m": 0.01, "resetDrySteps": 3, "max_c": 0.7},
+        "Troch": {"alpha_inv_m": None},
         "Aq": {"k": 1.468e-3, "f": 0.09, "D": 0.35},
         "Deep": {"phi_d": 0.0, "k_out_s": 1 / (83.333 * 86400)},
         "Route": {"enabled": True, "F": 0.8, "V": 1.0, "a0": 2/3,
@@ -126,7 +127,8 @@ class Config:
         # Also validate dictionaries modified through the Python API.
         merge_parameters(default_parameters(), p)
         def finite_scalars(group, prefix=""):
-            nullable = {"Veg.d", "Veg.z0m", "Veg.z0h", "Infil.K_mps", "Infil.S_mps05"}
+            nullable = {"Veg.d", "Veg.z0m", "Veg.z0h", "Infil.K_mps", "Infil.S_mps05",
+                        "Troch.alpha_inv_m"}
             for key, value in group.items():
                 name = prefix+key
                 if isinstance(value, dict):
@@ -170,6 +172,9 @@ class Config:
                 and num["picard_max"] >= 1 and 0 < num["cfl"] <= 0.5):
             raise ValueError("Invalid numerical options")
         inf = p["Infil"]
+        alpha_inv = p.get("Troch", {}).get("alpha_inv_m")
+        if alpha_inv is not None and alpha_inv <= 0:
+            raise ValueError("Troch.alpha_inv_m must be positive [m] or null")
         if (inf["model"].lower() not in ("milly", "troch") or inf["Fmin_m"] <= 0
                 or inf["F0_m"] < 0 or inf["resetDrySteps"] < 0
                 or (inf["K_mps"] is not None and inf["K_mps"] < 0)

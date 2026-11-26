@@ -78,7 +78,7 @@ The remaining values in the template are implementation defaults. Review them fo
 
 Choose \texttt{Flags.interception} explicitly. \texttt{Deep.phi\_d} controls the fraction of downward recharge entering the deep reservoir. Review each soil layer's initial water content, \texttt{theta0}. The optional \texttt{initial} object accepts scalar or node-vector values for \texttt{theta\_rz}, \texttt{theta\_tz}, \texttt{canopy\_m}, \texttt{aquifer\_head\_m}, \texttt{deep\_m}, and \texttt{infiltration\_m}. Soil water contents are in m$^3$\,m$^{-3}$; the other initial states are in m. Without overrides, soil water contents use \texttt{theta0}, canopy and aquifer storage start at zero, deep storage starts at 1 mm, and cumulative infiltration starts at zero. A nonzero initial canopy store requires interception to be enabled.
 
-Five optional parameters may remain \texttt{null}. \texttt{Veg.d}, \texttt{Veg.z0m}, and \texttt{Veg.z0h} then use the canopy-height relations. \texttt{Infil.K\_mps} and \texttt{Infil.S\_mps05} then use the soil-based infiltration expressions. Record data and parameter sources in \texttt{metadata} and retain an unchanged copy of the source data.
+Six optional parameters may remain \texttt{null}. \texttt{Veg.d}, \texttt{Veg.z0m}, and \texttt{Veg.z0h} then use the canopy-height relations. \texttt{Infil.K\_mps} and \texttt{Infil.S\_mps05} then use the soil-based infiltration expressions. \texttt{Troch.alpha\_inv\_m} also defaults to the soil-based capillary length. Record data and parameter sources in \texttt{metadata} and retain an unchanged copy of the source data.
 
 \subsection{Check the inputs and run}
 

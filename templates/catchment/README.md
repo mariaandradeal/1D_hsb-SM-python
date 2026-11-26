@@ -13,7 +13,7 @@ defaults, not estimates for your catchment.
 Other `null` values in the default parameter dictionary have a different role.
 `Veg.d`, `Veg.z0m`, and `Veg.z0h` use the canopy-height relations when null.
 `Infil.K_mps` and `Infil.S_mps05` use the soil-based infiltration expressions
-when null. These five optional values may remain null.
+when null. `Troch.alpha_inv_m` also defaults to the soil-based capillary length. These six optional values may remain null.
 
 File paths are relative to `config.json`. Record the source of the input data
 and parameter estimates in `metadata`. Keep an unchanged copy of the original

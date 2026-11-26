@@ -52,7 +52,11 @@ def infiltration_step(pnet, cumulative, dry_count, theta, params, dt):
     soil, inf = params["Soil"]["RZ"], params["Infil"]
     k = soil["vG"]["Ks"] if inf["K_mps"] is None else inf["K_mps"]
     se = np.clip((theta-soil["theta_min"])/(soil["theta_sat"]-soil["theta_min"]), 1e-6, 1)
-    s2 = 2*np.maximum(soil["theta_sat"]-theta, 0)*k/soil["vG"]["alpha"]
+    alpha = soil["vG"]["alpha"]
+    alpha_inv = params.get("Troch", {}).get("alpha_inv_m")
+    if inf["model"].lower() == "troch" and alpha_inv is not None:
+        alpha = 1/alpha_inv
+    s2 = 2*np.maximum(soil["theta_sat"]-theta, 0)*k/alpha
     if inf["S_mps05"] is not None:
         s2 = np.full_like(theta, inf["S_mps05"]**2)
     keff = np.minimum(inf["max_c"], se)*k if inf["model"].lower() == "troch" else k

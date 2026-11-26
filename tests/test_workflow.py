@@ -12,6 +12,14 @@ from hsbsm.io import read_observations
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.mark.parametrize("value", [0, -1, float("nan"), "3"])
+def test_invalid_troch_capillary_length_rejected(value):
+    cfg = load_config(ROOT/"examples/synthetic/config.json")
+    cfg.params["Troch"]["alpha_inv_m"] = value
+    with pytest.raises(ValueError):
+        cfg.validate()
+
+
 @pytest.mark.parametrize("kind", ["nan", "date", "negative", "parameter"])
 def test_bad_inputs_fail_early(kind):
     c = load_config(ROOT/"examples/synthetic/config.json")

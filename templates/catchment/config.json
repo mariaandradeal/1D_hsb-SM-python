@@ -89,6 +89,9 @@
     },
     "Flags": {
       "interception": false
+    },
+    "Troch": {
+      "alpha_inv_m": null
     }
   },
   "initial": {},

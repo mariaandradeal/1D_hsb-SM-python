@@ -117,3 +117,12 @@ selection order is Helvetica Light, Helvetica Neue Light, Helvetica, Arial,
 then DejaVu Sans, depending on installed fonts. SVG keeps text editable; PDF
 and PNG are generated from the same numerical output. No external LaTeX
 installation is needed to draw model figures.
+
+## Manual alignment and Troch compatibility
+
+The [one-by-one comparison](MATLAB_COMPATIBILITY.md) records the discrepancies
+and their resolution. `Troch.alpha_inv_m` is now supported as an optional
+positive capillary length [m], matching the active source infiltration function.
+Its default is null, so existing Milly runs retain their previous behavior.
+The manual now describes the implemented PM calculation, signed recharge,
+runoff accounting, dry reset, and Python output names.
